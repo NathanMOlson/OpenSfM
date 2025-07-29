@@ -1234,8 +1234,7 @@ def imread_from_fileobject(
                 "version 3.2 or newer.".format(cv2.__version__)
             )
 
-        if anydepth:
-            flags |= cv2.IMREAD_ANYDEPTH
+        flags |= cv2.IMREAD_ANYDEPTH
     else:
         if grayscale:
             flags = cv2.CV_LOAD_IMAGE_GRAYSCALE
@@ -1244,14 +1243,16 @@ def imread_from_fileobject(
         else:
             flags = cv2.CV_LOAD_IMAGE_COLOR
 
-        if anydepth:
-            flags |= cv2.CV_LOAD_IMAGE_ANYDEPTH
+        flags |= cv2.CV_LOAD_IMAGE_ANYDEPTH
 
     im_buffer = np.asarray(bytearray(fb.read()), dtype=np.uint8)
     image = cv2.imdecode(im_buffer, flags)
 
     if image is None:
         raise IOError("Unable to load image")
+
+    if image.dtype != np.uint8 and not anydepth:
+        cv2.normalize(image, image, 255, 0, cv2.NORM_MINMAX)
 
     if len(image.shape) == 3:
         image[:, :, :3] = image[:, :, [2, 1, 0]]  # Turn BGR to RGB (or BGRA to RGBA)
