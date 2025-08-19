@@ -1,4 +1,4 @@
-# pyre-unsafe
+# pyre-strict
 import os
 import sys
 if sys.platform == 'win32':

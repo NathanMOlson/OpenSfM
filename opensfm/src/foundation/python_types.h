@@ -4,7 +4,6 @@
 #include <pybind11/eigen.h>
 
 #include <cstdint>
-#include <iostream>
 #include <vector>
 
 #include "opencv2/core/core.hpp"

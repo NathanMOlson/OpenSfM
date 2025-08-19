@@ -1,4 +1,4 @@
-# pyre-unsafe
+# pyre-strict
 """Incremental reconstruction pipeline"""
 
 import datetime
@@ -15,6 +15,8 @@ import networkx as nx
 
 import cv2
 import numpy as np
+from numpy import typing as npt
+from numpy.typing import NDArray
 from opensfm import (
     log,
     matching,
@@ -203,7 +205,7 @@ def pairwise_reconstructability(common_tracks: int, rotation_inliers: int) -> fl
 
 
 TPairArguments = Tuple[
-    str, str, np.ndarray, np.ndarray, pygeometry.Camera, pygeometry.Camera, float
+    str, str, NDArray, NDArray, pygeometry.Camera, pygeometry.Camera, float
 ]
 
 
@@ -288,7 +290,7 @@ def add_shot(
 
 
 def _two_view_reconstruction_inliers(
-    b1: np.ndarray, b2: np.ndarray, R: np.ndarray, t: np.ndarray, threshold: float
+    b1: NDArray, b2: NDArray, R: NDArray, t: NDArray, threshold: float
 ) -> List[int]:
     """Returns indices of matches that can be triangulated."""
     ok = matching.compute_inliers_bearings(b1, b2, R, t, threshold)
@@ -298,10 +300,10 @@ def _two_view_reconstruction_inliers(
 
 
 def two_view_reconstruction_plane_based(
-    b1: np.ndarray,
-    b2: np.ndarray,
+    b1: NDArray,
+    b2: NDArray,
     threshold: float,
-) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], List[int]]:
+) -> Tuple[Optional[NDArray], Optional[NDArray], List[int]]:
     """Reconstruct two views from point correspondences lying on a plane.
 
     Args:
@@ -335,14 +337,14 @@ def two_view_reconstruction_plane_based(
 
 
 def two_view_reconstruction_and_refinement(
-    b1: np.ndarray,
-    b2: np.ndarray,
-    R: np.ndarray,
-    t: np.ndarray,
+    b1: NDArray,
+    b2: NDArray,
+    R: NDArray,
+    t: NDArray,
     threshold: float,
     iterations: int,
     transposed: bool,
-) -> Tuple[np.ndarray, np.ndarray, List[int]]:
+) -> Tuple[NDArray, NDArray, List[int]]:
     """Reconstruct two views using provided rotation and translation.
 
     Args:
@@ -376,7 +378,7 @@ def two_view_reconstruction_and_refinement(
 
 
 def _two_view_rotation_inliers(
-    b1: np.ndarray, b2: np.ndarray, R: np.ndarray, threshold: float
+    b1: NDArray, b2: NDArray, R: NDArray, threshold: float
 ) -> List[int]:
     br2 = R.dot(b2.T).T
     ok = np.linalg.norm(br2 - b1, axis=1) < threshold
@@ -386,12 +388,12 @@ def _two_view_rotation_inliers(
 
 
 def two_view_reconstruction_rotation_only(
-    p1: np.ndarray,
-    p2: np.ndarray,
+    p1: NDArray,
+    p2: NDArray,
     camera1: pygeometry.Camera,
     camera2: pygeometry.Camera,
     threshold: float,
-) -> Tuple[np.ndarray, List[int]]:
+) -> Tuple[NDArray, List[int]]:
     """Find rotation between two views from point correspondences.
 
     Args:
@@ -412,15 +414,15 @@ def two_view_reconstruction_rotation_only(
 
 
 def two_view_reconstruction_5pt(
-    b1: np.ndarray,
-    b2: np.ndarray,
-    R: np.ndarray,
-    t: np.ndarray,
+    b1: NDArray,
+    b2: NDArray,
+    R: NDArray,
+    t: NDArray,
     threshold: float,
     iterations: int,
     check_reversal: bool = False,
     reversal_ratio: float = 1.0,
-) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], List[int]]:
+) -> Tuple[Optional[NDArray], Optional[NDArray], List[int]]:
     """Run 5-point reconstruction and refinement, given computed relative rotation and translation.
 
     Optionally, the method will perform reconstruction and refinement for both given and transposed
@@ -484,16 +486,16 @@ def two_view_reconstruction_5pt(
     return R_5p, t_5p, inliers_5p
 
 
-def two_view_reconstruction_general(
-    p1: np.ndarray,
-    p2: np.ndarray,
+def two_view_reconstruction_general(  # pyre-ignore[3]: pyre is not happy with the Dict[str, Any]
+    p1: NDArray,
+    p2: NDArray,
     camera1: pygeometry.Camera,
     camera2: pygeometry.Camera,
     threshold: float,
     iterations: int,
     check_reversal: bool = False,
     reversal_ratio: float = 1.0,
-) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], List[int], Dict[str, Any]]:
+) -> Tuple[Optional[NDArray], Optional[NDArray], List[int], Dict[str, Any]]:
     """Reconstruct two views from point correspondences.
 
     These will try different reconstruction methods and return the
@@ -562,8 +564,8 @@ def reconstruction_from_relative_pose(
     tracks_manager: pymap.TracksManager,
     im1: str,
     im2: str,
-    R: np.ndarray,
-    t: np.ndarray,
+    R: NDArray,
+    t: NDArray,
 ) -> Tuple[Optional[types.Reconstruction], Dict[str, Any]]:
     """Create a reconstruction from 'im1' and 'im2' using the provided rotation 'R' and translation 't'."""
     report = {}
@@ -623,8 +625,8 @@ def bootstrap_reconstruction(
     tracks_manager: pymap.TracksManager,
     im1: str,
     im2: str,
-    p1: np.ndarray,
-    p2: np.ndarray,
+    p1: NDArray,
+    p2: NDArray,
 ) -> Tuple[Optional[types.Reconstruction], Dict[str, Any]]:
     """Start a reconstruction using two shots."""
     logger.info("Starting reconstruction with {} and {}".format(im1, im2))
@@ -792,7 +794,7 @@ def resect_reconstruction(
     tracks_manager2: pymap.TracksManager,
     threshold: float,
     min_inliers: int,
-) -> Tuple[bool, np.ndarray, List[Tuple[str, str]]]:
+) -> Tuple[bool, NDArray, List[Tuple[str, str]]]:
     """Compute a similarity transform `similarity` such as :
 
     reconstruction2 = T . reconstruction1
@@ -835,7 +837,7 @@ class TrackHandlerBase(ABC):
         pass
 
     @abstractmethod
-    def store_track_coordinates(self, track_id: str, coordinates: np.ndarray) -> None:
+    def store_track_coordinates(self, track_id: str, coordinates: NDArray) -> None:
         """Stores coordinates of triangulated track."""
         pass
 
@@ -869,7 +871,7 @@ class TrackHandlerTrackManager(TrackHandlerBase):
             if k in self.reconstruction.shots
         }
 
-    def store_track_coordinates(self, track_id: str, coordinates: np.ndarray) -> None:
+    def store_track_coordinates(self, track_id: str, coordinates: NDArray) -> None:
         """Stores coordinates of triangulated track."""
         self.reconstruction.create_point(track_id, coordinates)
 
@@ -892,9 +894,9 @@ class TrackTriangulator:
     tracks_handler: TrackHandlerBase
 
     # caches
-    origins: Dict[str, np.ndarray] = {}
-    rotation_inverses: Dict[str, np.ndarray] = {}
-    Rts: Dict[str, np.ndarray] = {}
+    origins: Dict[str, NDArray] = {}
+    rotation_inverses: Dict[str, NDArray] = {}
+    Rts: Dict[str, NDArray] = {}
 
     def __init__(
         self, reconstruction: types.Reconstruction, tracks_handler: TrackHandlerBase
@@ -902,9 +904,9 @@ class TrackTriangulator:
         """Build a triangulator for a specific reconstruction."""
         self.reconstruction = reconstruction
         self.tracks_handler = tracks_handler
-        self.origins = {}
-        self.rotation_inverses = {}
-        self.Rts = {}
+        self.origins: Dict[str, NDArray] = {}
+        self.rotation_inverses: Dict[str, NDArray] = {}
+        self.Rts: Dict[str, NDArray] = {}
 
     def triangulate_robust(
         self,
@@ -1127,7 +1129,7 @@ class TrackTriangulator:
                 for shot_id in ids:
                     self.tracks_handler.store_inliers_observation(track, shot_id)
 
-    def _shot_origin(self, shot: pymap.Shot) -> np.ndarray:
+    def _shot_origin(self, shot: pymap.Shot) -> NDArray:
         if shot.id in self.origins:
             return self.origins[shot.id]
         else:
@@ -1135,7 +1137,7 @@ class TrackTriangulator:
             self.origins[shot.id] = o
             return o
 
-    def _shot_rotation_inverse(self, shot: pymap.Shot) -> np.ndarray:
+    def _shot_rotation_inverse(self, shot: pymap.Shot) -> NDArray:
         if shot.id in self.rotation_inverses:
             return self.rotation_inverses[shot.id]
         else:
@@ -1143,7 +1145,7 @@ class TrackTriangulator:
             self.rotation_inverses[shot.id] = r
             return r
 
-    def _shot_Rt(self, shot: pymap.Shot) -> np.ndarray:
+    def _shot_Rt(self, shot: pymap.Shot) -> NDArray:
         if shot.id in self.Rts:
             return self.Rts[shot.id]
         else:
@@ -1343,7 +1345,7 @@ def align_two_reconstruction(
     r2: types.Reconstruction,
     common_tracks: List[Tuple[str, str]],
     threshold: float,
-) -> Tuple[bool, Optional[np.ndarray], List[int]]:
+) -> Tuple[bool, Optional[NDArray], List[int]]:
     """Estimate similarity transform T between two,
     reconstructions r1 and r2 such as r2 = T . r1
     """
@@ -1473,7 +1475,7 @@ class ShouldRetriangulate:
     ratio: float
     reconstruction: types.Reconstruction
 
-    def __init__(self, data, reconstruction) -> None:
+    def __init__(self, data: DataSetBase, reconstruction: types.Reconstruction) -> None:
         self.active = data.config["retriangulation"]
         self.ratio = data.config["retriangulation_ratio"]
         self.reconstruction = reconstruction
@@ -1687,6 +1689,50 @@ def triangulation_reconstruction(
     return report, [reconstruction]
 
 
+def _get_common_feature_arrays(
+    tracks_manager: pymap.TracksManager,
+    im1: str,
+    im2: str,
+) -> Tuple[NDArray, NDArray]:
+    """Return the feature arrays of common tracks between two images."""
+    features1 = []
+    features2 = []
+    for _, p1, p2 in tracks_manager.get_all_common_observations(im1, im2):
+        features1.append(p1.point)
+        features2.append(p2.point)
+    features1 = np.array(features1)
+    features2 = np.array(features2)
+    return (features1, features2)
+
+
+def compute_image_pairs_sequential(
+    data: DataSetBase,
+    tracks_manager: pymap.TracksManager,
+    min_common: int = 50,
+) -> List[Tuple[str, str]]:
+    """Compute all possible pairs of images that share at least `min_common` points.
+    The pairs are sorted by "reconstructability" which is estimated by the
+    pairwise_reconstructability function.
+    """
+    cameras = data.load_camera_models()
+    threshold = 4 * data.config["five_point_algo_threshold"]
+    results = []
+    connectivity = tracks_manager.get_all_pairs_connectivity()
+    for (im1, im2), size in connectivity.items():
+        if size < min_common:
+            continue
+        features1, features2 = _get_common_feature_arrays(tracks_manager, im1, im2)
+        camera1 = cameras[data.load_exif(im1)["camera"]]
+        camera2 = cameras[data.load_exif(im2)["camera"]]
+        result = _compute_pair_reconstructability(
+            (im1, im2, features1, features2, camera1, camera2, threshold)
+        )
+        if result[2] > 0:
+            results.append(result)
+    results.sort(key=lambda x: x[2], reverse=True)
+    return [(im1, im2) for im1, im2, _ in results]
+
+
 def incremental_reconstruction(
     data: DataSetBase, tracks_manager: pymap.TracksManager
 ) -> Tuple[Dict[str, Any], List[types.Reconstruction]]:
@@ -1702,9 +1748,22 @@ def incremental_reconstruction(
     remaining_images = set(images)
     gcp = data.load_ground_control_points()
     logger.info(f"Loaded {len(gcp)} ground control points.")
-    common_tracks = tracking.all_common_tracks_with_features(tracks_manager)
+
+    common_tracks = None
+    if data.config["processes"] > 1:
+        # Get pairs in parallel, preload all features for all
+        # pairs of image. Features of an image can be stored
+        # repeatedly in multiple image pairs.
+        # Pros: fast; Cons: high memory usage
+        common_tracks = tracking.all_common_tracks_with_features(tracks_manager)
+        pairs = compute_image_pairs(common_tracks, data)
+    else:
+        # Get pairs sequentially, load features lazily.
+        # Pros: low memory usage; Cons: slow
+        pairs = compute_image_pairs_sequential(data, tracks_manager)
+    logging.info(f"Estimated reconstructability of {len(pairs)} image pairs.")
+
     reconstructions = []
-    pairs = compute_image_pairs(common_tracks, data)
     chrono.lap("compute_image_pairs")
     report["num_candidate_image_pairs"] = len(pairs)
     report["reconstructions"] = []
@@ -1712,7 +1771,13 @@ def incremental_reconstruction(
         if im1 in remaining_images and im2 in remaining_images:
             rec_report = {}
             report["reconstructions"].append(rec_report)
-            _, p1, p2 = common_tracks[im1, im2]
+            if common_tracks is not None:
+                # Save time if the common features are preloaded
+                _, p1, p2 = common_tracks[im1, im2]
+            else:
+                # At the sacrifice of lazily reloading the features, we avoid
+                # storing features for all view pairs in memory
+                p1, p2 = _get_common_feature_arrays(tracks_manager, im1, im2)
             reconstruction, rec_report["bootstrap"] = bootstrap_reconstruction(
                 data, tracks_manager, im1, im2, p1, p2
             )

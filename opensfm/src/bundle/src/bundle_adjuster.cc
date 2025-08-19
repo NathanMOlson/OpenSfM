@@ -2,7 +2,6 @@
 #include <bundle/error/absolute_motion_errors.h>
 #include <bundle/error/motion_prior_errors.h>
 #include <bundle/error/parameters_errors.h>
-#include <bundle/error/position_functors.h>
 #include <bundle/error/prior_error.h>
 #include <bundle/error/projection_errors.h>
 #include <bundle/error/relative_depth_error.h>
@@ -425,7 +424,8 @@ ceres::LossFunction *CreateLossFunction(std::string name, double threshold) {
   } else if (name.compare("ArctanLoss") == 0) {
     return new ceres::ArctanLoss(threshold);
   }
-  return nullptr;
+  throw std::runtime_error("ceres::LossFunction with name " + name +
+                           " not found.");
 }
 
 void BundleAdjuster::AddLinearMotion(const std::string &shot0_id,

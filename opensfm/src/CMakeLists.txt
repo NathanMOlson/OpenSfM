@@ -15,6 +15,10 @@ else()
 set(CMAKE_MODULE_PATH ${opensfm_SOURCE_DIR}/cmake)
 endif()
 
+cmake_policy(SET CMP0063 NEW)
+# Re-activate once we can have a decent version of CMake (> 3.27)
+# cmake_policy(SET CMP0148 NEW)
+
 if (WIN32)
 # Place compilation results in opensfm/ folder, not in Debug/ or Release/
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE "${opensfm_SOURCE_DIR}/..")
@@ -109,6 +113,10 @@ if (OPENSFM_BUILD_TESTS)
   enable_testing()
   include_directories(third_party/gtest)
   add_definitions(-DCERES_GFLAGS_NAMESPACE=${GFLAGS_NAMESPACE})
+
+  # Gtest if old now and trigger these
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-missing-field-initializers")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-copy-with-user-provided-copy")
 
   add_library(gtest
               third_party/gtest/gmock_gtest_all.cc

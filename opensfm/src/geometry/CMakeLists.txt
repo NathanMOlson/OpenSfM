@@ -49,7 +49,6 @@ target_link_libraries(pygeometry
   PRIVATE
     geometry
     foundation
-    pybind11
 )
 
 if (OPENSFM_BUILD_TESTS)
