@@ -25,6 +25,7 @@ target_include_directories(foundation
 )
 
 if (OPENSFM_BUILD_TESTS)
+    target_link_libraries(foundation PRIVATE ${GLOG_LIBRARY})
     set(FOUNDATION_TEST_FILES
         test/newton_raphson_test.cc
         test/union_find_test.cc
@@ -34,8 +35,6 @@ if (OPENSFM_BUILD_TESTS)
     target_link_libraries(foundation_test
                           PUBLIC
                           foundation
-                          ${TEST_MAIN}
-                          ${GLOG_LIBRARY}
-                          )
+                          ${TEST_MAIN})
     add_test(foundation_test foundation_test)
 endif()
