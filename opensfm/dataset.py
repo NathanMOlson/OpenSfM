@@ -705,7 +705,7 @@ class DataSet(DataSetBase):
         )
 
 
-class UndistortedDataSet(object):
+class UndistortedDataSet:
     """Accessors to the undistorted data of a dataset.
 
     Data include undistorted images, masks, and segmentation as well
