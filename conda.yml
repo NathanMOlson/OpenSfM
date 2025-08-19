@@ -5,6 +5,7 @@ dependencies:
     - make
     - libxcrypt
     - libxml2
+    - libxslt
     - libopencv *=headless*
     - py-opencv
     - ceres-solver=2.1
