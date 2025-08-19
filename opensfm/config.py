@@ -1,3 +1,4 @@
+# pyre-unsafe
 import os
 from dataclasses import dataclass, asdict
 from typing import Any, Dict, IO, Union
@@ -41,6 +42,12 @@ class OpenSfMConfig:
     sift_peak_threshold: float = 0.2
     # See OpenCV doc
     sift_edge_threshold: int = 10
+    # See OpenCV doc
+    sift_nfeatures: int = 0
+    # See OpenCV doc
+    sift_octave_layers: int = 3
+    # See OpenCV doc
+    sift_sigma: float = 1.6
 
     ##################################
     # Params for SURF
@@ -210,6 +217,14 @@ class OpenSfMConfig:
     ##################################
     # Minimum number of features/images per track
     min_track_length: int = 2
+    # Whether to use depth prior during BA
+    use_depth_prior: bool = False
+    # Depth prior default std deviation
+    depth_std_deviation_m_default: float = 1.0
+    # Whether depth is radial (distance to camera center) or Z value
+    depth_is_radial: bool = False
+    # Whether depth is stored as inverted depth
+    depth_is_inverted: bool = False
 
     ##################################
     # Params for bundle adjustment

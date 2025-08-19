@@ -1,3 +1,4 @@
+# pyre-unsafe
 import argparse
 import json
 import typing as t
@@ -7,9 +8,9 @@ from pathlib import Path
 from typing import Union
 
 import numpy as np
-from annotation_gui_gcp.lib import GUI
-from annotation_gui_gcp.lib.gcp_manager import GroundControlPointManager
-from annotation_gui_gcp.lib.image_manager import ImageManager
+from mapillary.opensfm.annotation_gui_gcp.lib import GUI
+from mapillary.opensfm.annotation_gui_gcp.lib.gcp_manager import GroundControlPointManager
+from mapillary.opensfm.annotation_gui_gcp.lib.image_manager import ImageManager
 from flask import Flask
 from opensfm import dataset, io
 

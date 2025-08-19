@@ -1,3 +1,4 @@
+# pyre-unsafe
 import logging
 from functools import lru_cache
 from typing import Optional, Tuple, Any
@@ -132,6 +133,7 @@ class FeatureLoader:
             return features
 
         desc_augmented = np.concatenate(
+            # pyre-fixme[6]: For 1st argument expected `Union[_SupportsArray[dtype[ty...
             (
                 features.descriptors,
                 (np.array([segmentation]).T).astype(np.float32),

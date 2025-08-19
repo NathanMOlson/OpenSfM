@@ -1,3 +1,4 @@
+# pyre-unsafe
 import copy
 import logging
 import math
@@ -471,6 +472,8 @@ def construct_pairs(
         order = np.argsort(distances)
         if enforce_other_cameras:
             pairs.update(
+                # pyre-fixme[6]: For 4th argument expected `List[int]` but got
+                #  `ndarray[typing.Any, dtype[typing.Any]]`.
                 pairs_from_neighbors(im, exifs, distances, order, other, max_neighbors)
             )
         else:

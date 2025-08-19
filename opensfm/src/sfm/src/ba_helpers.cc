@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cmath>
 #include <stdexcept>
+#include <string>
 
 #include "geo/geo.h"
 #include "map/defines.h"
@@ -235,7 +236,7 @@ py::tuple BAHelpers::BundleLocal(
       }
       const auto& obs = lm_obs.second;
       ba.AddPointProjectionObservation(shot->id_, lm_obs.first->id_, obs.point,
-                                       obs.scale);
+                                       obs.scale, obs.depth_prior);
       ++added_reprojections;
     }
   }
@@ -245,7 +246,7 @@ py::tuple BAHelpers::BundleLocal(
       if (points.count(lm) > 0) {
         const auto& obs = lm_obs.second;
         ba.AddPointProjectionObservation(shot->id_, lm_obs.first->id_,
-                                         obs.point, obs.scale);
+                                         obs.point, obs.scale, obs.depth_prior);
         ++added_reprojections;
       }
     }
@@ -532,7 +533,7 @@ py::dict BAHelpers::BundleShotPoses(
     for (const auto& lm_obs : shot.GetLandmarkObservations()) {
       const auto& obs = lm_obs.second;
       ba.AddPointProjectionObservation(shot.id_, lm_obs.first->id_, obs.point,
-                                       obs.scale);
+                                       obs.scale, obs.depth_prior);
     }
   }
 
@@ -672,6 +673,11 @@ py::dict BAHelpers::Bundle(
         const auto pos = shot.GetShotMeasurements().gps_position_;
         const auto acc = shot.GetShotMeasurements().gps_accuracy_;
         if (pos.HasValue() && acc.HasValue()) {
+          if (acc.Value() <= 0) {
+            throw std::runtime_error("Shot " + shot.GetId() + " has an accuracy <= 0: "
+                                    + std::to_string(acc.Value()) + ". Try modifying "
+                                    "your input parser to filter such values.");
+          }
           average_position += pos.Value();
           average_std += acc.Value();
           ++gps_count;
@@ -705,7 +711,7 @@ py::dict BAHelpers::Bundle(
     for (const auto& lm_obs : shot.GetLandmarkObservations()) {
       const auto& obs = lm_obs.second;
       ba.AddPointProjectionObservation(shot.id_, lm_obs.first->id_, obs.point,
-                                       obs.scale);
+                                       obs.scale, obs.depth_prior);
       ++added_reprojections;
     }
   }
@@ -852,7 +858,9 @@ void BAHelpers::AlignmentConstraints(
   // Triangulated vs measured points
   if (!gcp.empty() && config["bundle_use_gcp"].cast<bool>()) {
     for (const auto& point : gcp) {
-      if (point.lla_.empty()) continue;
+      if (point.lla_.empty()) {
+        continue;
+      }
       Vec3d coordinates;
       if (TriangulateGCP(point, shots, coordinates)) {
         Xp.row(idx) = topocentricConverter.ToTopocentric(point.GetLlaVec3d());

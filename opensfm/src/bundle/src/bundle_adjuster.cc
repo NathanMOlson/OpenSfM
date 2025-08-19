@@ -5,6 +5,7 @@
 #include <bundle/error/position_functors.h>
 #include <bundle/error/prior_error.h>
 #include <bundle/error/projection_errors.h>
+#include <bundle/error/relative_depth_error.h>
 #include <bundle/error/relative_motion_errors.h>
 #include <foundation/types.h>
 
@@ -18,7 +19,7 @@ bool IsRigCameraUseful(bundle::RigCamera &rig_camera) {
   return !(rig_camera.GetParametersToOptimize().empty() &&
            rig_camera.GetValueData().isConstant(0.));
 }
-};  // namespace
+}  // namespace
 
 namespace bundle {
 BundleAdjuster::BundleAdjuster() {
@@ -140,7 +141,7 @@ void BundleAdjuster::AddRigInstance(
                                          &rig_camera_exists->second,
                                          &rig_instances_.at(rig_instance_id)));
   }
-};
+}
 
 void BundleAdjuster::AddRigCamera(const std::string &rig_camera_id,
                                   const geometry::Pose &pose,
@@ -161,7 +162,7 @@ void BundleAdjuster::AddRigCamera(const std::string &rig_camera_id,
   if (fixed) {
     rig_camera.SetParametersToOptimize({});
   }
-};
+}
 
 void BundleAdjuster::AddRigInstancePositionPrior(
     const std::string &instance_id, const Vec3d &position,
@@ -239,13 +240,15 @@ void BundleAdjuster::AddPointPrior(const std::string &point_id,
 void BundleAdjuster::AddPointProjectionObservation(const std::string &shot,
                                                    const std::string &point,
                                                    const Vec2d &observation,
-                                                   double std_deviation) {
+                                                   double std_deviation,
+                                                   const std::optional<map::Depth>& depth_prior) {
   PointProjectionObservation o;
   o.shot = &shots_.at(shot);
   o.camera = &cameras_.at(o.shot->GetCamera()->GetID());
   o.point = &points_.at(point);
   o.coordinates = observation;
   o.std_deviation = std_deviation;
+  o.depth_prior = depth_prior;
   point_projection_observations_.push_back(o);
 }
 
@@ -424,7 +427,7 @@ ceres::LossFunction *CreateLossFunction(std::string name, double threshold) {
   } else if (name.compare("ArctanLoss") == 0) {
     return new ceres::ArctanLoss(threshold);
   }
-  return NULL;
+  return nullptr;
 }
 
 void BundleAdjuster::AddLinearMotion(const std::string &shot0_id,
@@ -487,6 +490,37 @@ struct AddProjectionError {
     }
     problem->AddResidualBlock(cost_function, loss,
                               obs.camera->GetValueData().data(),
+                              obs.shot->GetRigInstance()->GetValueData().data(),
+                              obs.shot->GetRigCamera()->GetValueData().data(),
+                              obs.point->GetValueData().data());
+  }
+};
+
+struct AddRelativeDepthError {
+  template <class T>
+  static void Apply(const PointProjectionObservation &obs,
+                    ceres::LossFunction *loss, ceres::Problem *problem) {
+    constexpr static int ShotSize = 6;
+    constexpr static int PointSize = 3;
+
+    if (!obs.depth_prior.has_value()) {
+      return;
+    }
+    const auto& depth = obs.depth_prior.value();
+    if (!ceres::isfinite(depth.value)) {
+      throw std::runtime_error(obs.shot->GetID() + " has non-finite depth prior");
+    }
+
+    const bool is_rig_camera_useful =
+        IsRigCameraUseful(*obs.shot->GetRigCamera());
+    ceres::CostFunction *cost_function = nullptr;
+
+    cost_function =
+        new ceres::AutoDiffCostFunction<RelativeDepthError, RelativeDepthError::Size, ShotSize, ShotSize, PointSize>(
+          new RelativeDepthError(depth.value, depth.std_deviation, is_rig_camera_useful, depth.is_radial)
+        );
+
+    problem->AddResidualBlock(cost_function, loss,
                               obs.shot->GetRigInstance()->GetValueData().data(),
                               obs.shot->GetRigCamera()->GetValueData().data(),
                               obs.point->GetValueData().data());
@@ -561,12 +595,12 @@ void BundleAdjuster::Run() {
   ceres::Problem problem;
 
   // Add cameras
-  for (auto &i : cameras_) {
-    auto &data = i.second.GetValueData();
+  for (auto &[_, cam] : cameras_) {
+    auto &data = cam.GetValueData();
     problem.AddParameterBlock(data.data(), data.size());
 
     // Lock parameters based on bitmask of parameters : only constant for now
-    if (i.second.GetParametersToOptimize().empty()) {
+    if (cam.GetParametersToOptimize().empty()) {
       problem.SetParameterBlockConstant(data.data());
     }else if (i.second.GetValue().GetProjectionType() == geometry::ProjectionType::BROWN){
         // Keep aspect ratio constant (BROWN only)
@@ -575,7 +609,7 @@ void BundleAdjuster::Run() {
     }
 
     // Add a barrier for constraining transition of dual to stay in [0, 1]
-    const auto camera = i.second.GetValue();
+    const auto camera = cam.GetValue();
     if (camera.GetProjectionType() == geometry::ProjectionType::DUAL) {
       const auto types = camera.GetParametersTypes();
       int index = -1;
@@ -775,6 +809,10 @@ void BundleAdjuster::Run() {
         observation.camera->GetValue().GetProjectionType();
     geometry::Dispatch<AddProjectionError>(
         projection_type, use_analytic_, observation, projection_loss, &problem);
+
+    // Add relative depth error blocks
+    geometry::Dispatch<AddRelativeDepthError>(
+        projection_type, observation, projection_loss, &problem);
   }
 
   // Add relative motion errors
@@ -1098,9 +1136,8 @@ void BundleAdjuster::ComputeCovariances(ceres::Problem *problem) {
 
     std::vector<std::pair<const double *, const double *>> covariance_blocks;
     for (auto &i : shots_) {
-      covariance_blocks.push_back(
-          std::make_pair(i.second.GetRigInstance()->GetValueData().data(),
-                         i.second.GetRigInstance()->GetValueData().data()));
+      covariance_blocks.emplace_back(i.second.GetRigInstance()->GetValueData().data(),
+                         i.second.GetRigInstance()->GetValueData().data());
     }
 
     bool worked = covariance.Compute(covariance_blocks, problem);
@@ -1133,7 +1170,9 @@ void BundleAdjuster::ComputeCovariances(ceres::Problem *problem) {
         break;
       }
       // stop after first Nan value
-      if (!computed) break;
+      if (!computed) {
+        break;
+      }
     }
   }
 

@@ -1,10 +1,11 @@
+# pyre-unsafe
 import json
 import os.path
 from io import StringIO
 
 import numpy as np
 from opensfm import io, pygeometry, types
-from opensfm.test import data_generation, utils
+from mapillary.opensfm.opensfm.test import data_generation, utils
 
 
 filename = os.path.join(

@@ -1,8 +1,9 @@
+# pyre-unsafe
 import argparse
 from os.path import join
 
 from opensfm import commands, dataset
-from opensfm.test import data_generation, utils
+from mapillary.opensfm.opensfm.test import data_generation, utils
 
 
 def run_command(command, args) -> None:
