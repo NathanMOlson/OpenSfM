@@ -1046,9 +1046,9 @@ def ply_header(
             "property float nx",
             "property float ny",
             "property float nz",
-            "property uchar diffuse_red",
-            "property uchar diffuse_green",
-            "property uchar diffuse_blue",
+            "property uchar red",      
+            "property uchar green",     
+            "property uchar blue",      
         ]
     else:
         header = [
@@ -1058,9 +1058,9 @@ def ply_header(
             "property float x",
             "property float y",
             "property float z",
-            "property uchar diffuse_red",
-            "property uchar diffuse_green",
-            "property uchar diffuse_blue",
+            "property uchar red",    
+            "property uchar green",   
+            "property uchar blue", 
         ]
 
     if point_num_views:
@@ -1159,9 +1159,9 @@ def point_cloud_to_ply(
     fp.write("property float nx\n")
     fp.write("property float ny\n")
     fp.write("property float nz\n")
-    fp.write("property uchar diffuse_red\n")
-    fp.write("property uchar diffuse_green\n")
-    fp.write("property uchar diffuse_blue\n")
+    fp.write("property uchar red\n")
+    fp.write("property uchar green\n")
+    fp.write("property uchar blue\n")
     fp.write("property uchar class\n")
     fp.write("end_header\n")
 
@@ -1448,7 +1448,6 @@ class IoFilesystemDefault(IoFilesystemBase):
 
     @classmethod
     def exists(cls, path: str) -> str:
-        # pyre-fixme[7]: Expected `str` but got `bool`.
         return os.path.exists(path)
 
     @classmethod
@@ -1457,12 +1456,10 @@ class IoFilesystemDefault(IoFilesystemBase):
 
     @classmethod
     def isfile(cls, path: str) -> str:
-        # pyre-fixme[7]: Expected `str` but got `bool`.
         return os.path.isfile(path)
 
     @classmethod
     def isdir(cls, path: str) -> str:
-        # pyre-fixme[7]: Expected `str` but got `bool`.
         return os.path.isdir(path)
 
     @classmethod
@@ -1532,5 +1529,4 @@ class IoFilesystemDefault(IoFilesystemBase):
                 return r.height, r.width
     @classmethod
     def timestamp(cls, path: str) -> str:
-        # pyre-fixme[7]: Expected `str` but got `float`.
         return os.path.getmtime(path)
