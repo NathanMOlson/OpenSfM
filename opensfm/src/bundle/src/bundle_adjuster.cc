@@ -237,11 +237,9 @@ void BundleAdjuster::AddPointPrior(const std::string &point_id,
   point_exist->second.has_altitude_prior = has_altitude_prior;
 }
 
-void BundleAdjuster::AddPointProjectionObservation(const std::string &shot,
-                                                   const std::string &point,
-                                                   const Vec2d &observation,
-                                                   double std_deviation,
-                                                   const std::optional<map::Depth>& depth_prior) {
+void BundleAdjuster::AddPointProjectionObservation(
+    const std::string &shot, const std::string &point, const Vec2d &observation,
+    double std_deviation, const std::optional<map::Depth> &depth_prior) {
   PointProjectionObservation o;
   o.shot = &shots_.at(shot);
   o.camera = &cameras_.at(o.shot->GetCamera()->GetID());
@@ -506,9 +504,10 @@ struct AddRelativeDepthError {
     if (!obs.depth_prior.has_value()) {
       return;
     }
-    const auto& depth = obs.depth_prior.value();
-    if (!ceres::isfinite(depth.value)) {
-      throw std::runtime_error(obs.shot->GetID() + " has non-finite depth prior");
+    const auto &depth = obs.depth_prior.value();
+    if (!std::isfinite(depth.value)) {
+      throw std::runtime_error(obs.shot->GetID() +
+                               " has non-finite depth prior");
     }
 
     const bool is_rig_camera_useful =
@@ -516,9 +515,11 @@ struct AddRelativeDepthError {
     ceres::CostFunction *cost_function = nullptr;
 
     cost_function =
-        new ceres::AutoDiffCostFunction<RelativeDepthError, RelativeDepthError::Size, ShotSize, ShotSize, PointSize>(
-          new RelativeDepthError(depth.value, depth.std_deviation, is_rig_camera_useful, depth.is_radial)
-        );
+        new ceres::AutoDiffCostFunction<RelativeDepthError,
+                                        RelativeDepthError::Size, ShotSize,
+                                        ShotSize, PointSize>(
+            new RelativeDepthError(depth.value, depth.std_deviation,
+                                   is_rig_camera_useful, depth.is_radial));
 
     problem->AddResidualBlock(cost_function, loss,
                               obs.shot->GetRigInstance()->GetValueData().data(),
@@ -602,7 +603,7 @@ void BundleAdjuster::Run() {
     // Lock parameters based on bitmask of parameters : only constant for now
     if (cam.GetParametersToOptimize().empty()) {
       problem.SetParameterBlockConstant(data.data());
-    }else if (i.second.GetValue().GetProjectionType() == geometry::ProjectionType::BROWN){
+    }else if (cam.GetValue().GetProjectionType() == geometry::ProjectionType::BROWN){
         // Keep aspect ratio constant (BROWN only)
         ceres::SubsetParameterization *subset_parameterization = new ceres::SubsetParameterization(data.size(), { 6 });
         problem.SetParameterization(data.data(), subset_parameterization);
@@ -811,8 +812,8 @@ void BundleAdjuster::Run() {
         projection_type, use_analytic_, observation, projection_loss, &problem);
 
     // Add relative depth error blocks
-    geometry::Dispatch<AddRelativeDepthError>(
-        projection_type, observation, projection_loss, &problem);
+    geometry::Dispatch<AddRelativeDepthError>(projection_type, observation,
+                                              projection_loss, &problem);
   }
 
   // Add relative motion errors
@@ -1136,8 +1137,9 @@ void BundleAdjuster::ComputeCovariances(ceres::Problem *problem) {
 
     std::vector<std::pair<const double *, const double *>> covariance_blocks;
     for (auto &i : shots_) {
-      covariance_blocks.emplace_back(i.second.GetRigInstance()->GetValueData().data(),
-                         i.second.GetRigInstance()->GetValueData().data());
+      covariance_blocks.emplace_back(
+          i.second.GetRigInstance()->GetValueData().data(),
+          i.second.GetRigInstance()->GetValueData().data());
     }
 
     bool worked = covariance.Compute(covariance_blocks, problem);

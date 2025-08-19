@@ -2,18 +2,18 @@
 import itertools
 import logging
 import os
-from typing import Iterator, List, Dict, Optional, Callable
+from typing import Callable, Dict, Iterator, List, Optional
 
 import cv2
 import numpy as np
 from opensfm import (
     features,
+    features_processing,
     log,
     pygeometry,
     pymap,
     transformations as tf,
     types,
-    features_processing,
 )
 from opensfm.context import parallel_map
 from opensfm.dataset import UndistortedDataSet
@@ -261,7 +261,13 @@ def undistort_image(
         return {}
 
     projection_type = shot.camera.projection_type
-    if projection_type in ["perspective", "brown", "fisheye", "fisheye_opencv", "fisheye62"]:
+    if projection_type in [
+        "perspective",
+        "brown",
+        "fisheye",
+        "fisheye_opencv",
+        "fisheye62",
+    ]:
         [undistorted_shot] = undistorted_shots
         new_camera = undistorted_shot.camera
         height, width = original.shape[:2]

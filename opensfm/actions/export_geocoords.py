@@ -1,11 +1,11 @@
 # pyre-unsafe
 import logging
 import os
-from opensfm import types
+from typing import List, Sequence
 
 import numpy as np
 import pyproj
-from opensfm import io
+from opensfm import io, types
 from opensfm.dataset import DataSet, UndistortedDataSet
 from opensfm.geo import TopocentricConverter
 from opensfm.reconstruction import bundle_shot_poses
@@ -20,7 +20,7 @@ def run_dataset(
     transformation: bool,
     image_positions: bool,
     reconstruction: bool,
-    dense : bool,
+    dense: bool,
     output: str,
     offset = (0, 0),
     mode = "affine"
@@ -79,7 +79,9 @@ def run_dataset(
         _transform_dense_point_cloud(udata, t, output_path)
 
 
-def _get_transformation(reference: TopocentricConverter, projection: pyproj.Proj, offset) -> np.ndarray:
+def _get_transformation(
+    reference: TopocentricConverter, projection: pyproj.Proj, offset
+) -> np.ndarray:
     """Get the linear transform from reconstruction coords to geocoords."""
     p = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 0]]
     q = [_transform(point, reference, projection) for point in p]
@@ -99,11 +101,13 @@ def _write_transformation(transformation: np.ndarray, filename: str) -> None:
     """Write the 4x4 matrix transformation to a text file."""
     with io.open_wt(filename) as fout:
         for row in transformation:
-            fout.write(u" ".join(map(str, row)))
-            fout.write(u"\n")
+            fout.write(" ".join(map(str, row)))
+            fout.write("\n")
 
 
-def _transform(point: Sequence, reference: TopocentricConverter, projection: pyproj.Proj) -> List[float]:
+def _transform(
+    point: Sequence, reference: TopocentricConverter, projection: pyproj.Proj
+) -> List[float]:
     """Transform on point from local coords to a proj4 projection."""
     lat, lon, altitude = reference.to_lla(point[0], point[1], point[2])
     easting, northing = projection(lon, lat)
