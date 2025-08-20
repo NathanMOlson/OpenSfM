@@ -7,6 +7,7 @@ from opensfm.dataset import DataSet
 from typing import Callable
 import numpy as np
 
+
 def run_dataset(
     data: DataSet,
     reconstruction: Optional[str] = None,

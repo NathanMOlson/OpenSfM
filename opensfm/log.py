@@ -4,6 +4,7 @@ import os
 from typing import Optional
 import vmem
 
+
 def setup() -> None:
     logging.basicConfig(
         format="%(asctime)s %(levelname)s: %(message)s", level=logging.DEBUG, force=True

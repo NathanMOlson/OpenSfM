@@ -210,4 +210,3 @@ class FeatureLoader:
         else:
             features_data.points = np.array(features_data.points[:, :3], dtype=float)
         return features_data
-

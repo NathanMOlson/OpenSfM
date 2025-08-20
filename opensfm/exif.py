@@ -489,8 +489,8 @@ class EXIF:
                         )
                         logger.debug(
                             'Naively assuming UTC on "{0:s}" in image file '
-                            '"{1:s}"'.format(datetime_tag, self.fileobj.name))
-
+                            '"{1:s}"'.format(datetime_tag, self.fileobj_name)
+                        )
                 return (d - datetime.datetime(1970, 1, 1)).total_seconds()
         logger.info(
             'Image file "{0:s}" has no valid time stamp'.format(self.fileobj_name)
@@ -631,15 +631,15 @@ class EXIF:
         capture_time = self.extract_capture_time()
         opk = self.extract_opk(geo)
         d = {
-            'make': make,
-            'model': model,
-            'width': width,
-            'height': height,
-            'projection_type': projection_type,
-            'focal_ratio': focal_ratio,
-            'orientation': orientation,
-            'capture_time': capture_time,
-            'gps': geo,
+            "make": make,
+            "model": model,
+            "width": width,
+            "height": height,
+            "projection_type": projection_type,
+            "focal_ratio": focal_ratio,
+            "orientation": orientation,
+            "capture_time": capture_time,
+            "gps": geo,
         }
         if opk:
             d["opk"] = opk
@@ -785,7 +785,7 @@ def camera_from_exif_metadata(
             np.array([calib["c_x"], calib["c_y"]]),
             np.array([calib["k1"], calib["k2"], calib["k3"], calib["p1"], calib["p2"]]),
         )
-    elif calib_pt == 'fisheye':
+    elif calib_pt == "fisheye":
         camera = pygeometry.Camera.create_fisheye(
             calib["focal"], calib["k1"], calib["k2"]
         )

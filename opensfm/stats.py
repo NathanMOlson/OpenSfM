@@ -235,6 +235,7 @@ def gcp_errors(
     for gcp in gcps:
         if not gcp.lla:
             continue
+
         triangulated = None
         for rec in reconstructions:
             triangulated = multiview.triangulate_gcp(gcp, rec.shots, 1.0, 0.1)
@@ -245,7 +246,6 @@ def gcp_errors(
 
         if triangulated is None:
             continue
-
         gcp_enu = reference.to_topocentric(*gcp.lla_vec)
         e = triangulated - gcp_enu
         all_errors.append(e)

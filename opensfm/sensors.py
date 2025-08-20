@@ -7,6 +7,7 @@ from opensfm import context, io
 import sqlite3
 import os
 
+
 @lru_cache(1)
 def sensor_data() -> Dict[str, Any]:
     if os.path.isfile(context.SENSOR_DATA_DB):

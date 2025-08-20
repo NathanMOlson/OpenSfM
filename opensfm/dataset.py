@@ -317,10 +317,10 @@ class DataSet(DataSetBase):
     def save_features(self, image: str, features_data: features.FeaturesData) -> None:
         self._save_features(self._feature_file(image), features_data)
 
-    def _words_file(self, image):
+    def _words_file(self, image: str) -> str:
         return os.path.join(self._feature_path(), image + ".words.npz")
 
-    def words_exist(self, image):
+    def words_exist(self, image: str) -> bool:
         return self.io_handler.isfile(self._words_file(image))
 
     def load_words(self, image: str) -> NDArray:
