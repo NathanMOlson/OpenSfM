@@ -647,8 +647,6 @@ def extract_features(
         image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     else:
         image_gray = image
-
-    keypoints = None
     feature_type = config["feature_type"].upper()
     if feature_type == "SIFT":
         points, desc = extract_features_sift(image_gray, config, features_count)
@@ -674,10 +672,6 @@ def extract_features(
     colors = image[ys, xs]
     if image.shape[2] == 1:
         colors = np.repeat(colors, 3).reshape((-1, 3))
-
-    if keypoints is not None:
-        return normalize_features(points, desc, colors,
-                                  image.shape[1], image.shape[0]), keypoints
 
     return normalize_features(points, desc, colors, image.shape[1], image.shape[0])
 
