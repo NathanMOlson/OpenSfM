@@ -513,8 +513,17 @@ def extract_features_hahog(
     image: NDArray, config: Dict[str, Any], features_count: int
 ) -> Tuple[NDArray, NDArray]:
     t = time.time()
+
+    # VlFeat expects pixel values between 0, 1
+    if np.issubdtype(image.dtype, np.uint8):
+        image = image.astype(np.float32) / 255
+    if np.issubdtype(image.dtype, np.uint16):
+        image = image.astype(np.float32) / 65535
+    elif not np.issubdtype(image.dtype, np.float32):
+        raise TypeError(f"HAHOG unsupported image type: {image.dtype}")
+
     points, desc = pyfeatures.hahog(
-        image.astype(np.float32) / 255,  # VlFeat expects pixel values between 0, 1
+        image,  
         peak_threshold=config["hahog_peak_threshold"],
         edge_threshold=config["hahog_edge_threshold"],
         target_num_features=features_count,
@@ -596,7 +605,10 @@ def extract_features(
 
     assert image.ndim == 2 or image.ndim == 3 and image.shape[2] in [1, 3]
     assert image.shape[0] > 2 and image.shape[1] > 2
-    assert np.issubdtype(image.dtype, np.uint8)
+
+    feature_type = config["feature_type"].upper()
+    if not does_type_support_any_depth(feature_type):
+        assert np.issubdtype(image.dtype, np.uint8)
 
     image = resized_image(image, extraction_size)
     if image.ndim == 2:  # convert (h, w) to (h, w, 1)
@@ -607,7 +619,6 @@ def extract_features(
         image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     else:
         image_gray = image
-    feature_type = config["feature_type"].upper()
     if feature_type == "SIFT":
         points, desc = extract_features_sift(image_gray, config, features_count)
     elif feature_type == "SURF":
@@ -668,3 +679,6 @@ def build_flann_index(descriptors: NDArray, config: Dict[str, Any]) -> cv2.flann
         )
 
     return context.flann_Index(descriptors, flann_params)
+
+def does_type_support_any_depth(feature_type: str) -> bool:
+    return feature_type.upper() in ["HAHOG"]
