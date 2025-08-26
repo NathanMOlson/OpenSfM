@@ -14,7 +14,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 class Report:
-    def __init__(self, data: DataSet) -> None:
+    def __init__(self, data: DataSet, stats = None) -> None:
         self.output_path: str = os.path.join(data.data_path, "stats")
         self.dataset_name: str = os.path.basename(data.data_path)
         self.io_handler: io.IoFilesystemBase = data.io_handler
@@ -37,7 +37,10 @@ class Report:
         self.cell_height = 7
         self.total_size = 190
 
-        self.stats: Dict[str, Any] = self._read_stats_file("stats.json")
+        if stats is not None:
+            self.stats = stats
+        else:
+            self.stats = self._read_stats_file("stats.json")
 
     def save_report(self, filename: str) -> None:
         bytestring = self.pdf.output(dest="S")
