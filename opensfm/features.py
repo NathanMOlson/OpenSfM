@@ -580,7 +580,7 @@ def extract_features_dspsift(
 
     points, desc = pyfeatures.dspsift(
         image,
-        peak_threshold=float(config["sift_peak_threshold"]),
+        peak_threshold=float(config["sift_peak_threshold"]/10),
         edge_threshold=float(config["sift_edge_threshold"]),
         target_num_features=features_count,
         feature_root=bool(config["feature_root"]),
