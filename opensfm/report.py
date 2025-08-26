@@ -192,7 +192,7 @@ class Report:
             ["Capture End", self.stats["processing_statistics"]["end_date"]],
         ]
         if self.stats.get('odm_processing_statistics') and self.stats['odm_processing_statistics'].get('total_time_human'):
-            rows[2][1] = self.stats['odm_processing_statistics']['total_time_human'],
+            rows[2][1] = self.stats['odm_processing_statistics']['total_time_human']
         self._make_table(None, rows, True)
         self.pdf.set_xy(self.margin, self.pdf.get_y() + self.margin)
 
