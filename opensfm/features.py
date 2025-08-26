@@ -422,6 +422,20 @@ def extract_features_sift(
         desc = np.array(np.zeros((0, 3)))
     return points, desc
 
+def extract_features_popsift(
+    image: NDArray, config: Dict[str, Any], features_count: int
+) -> Tuple[NDArray, NDArray]:
+    from opensfm import pypopsift
+
+    sift_edge_threshold = float(config["sift_edge_threshold"])
+    sift_peak_threshold = float(config["sift_peak_threshold"])
+
+    points, desc = pypopsift.popsift(image, peak_threshold=sift_peak_threshold,
+                                edge_threshold=sift_edge_threshold,
+                                target_num_features=features_count,
+                                use_root=bool(config["feature_root"]))
+
+    return points, desc
 
 def extract_features_surf(
     image: NDArray, config: Dict[str, Any], features_count: int
@@ -542,6 +556,24 @@ def extract_features_hahog(
     return points, desc
 
 
+def extract_features_dspsift(
+    image: NDArray, config: Dict[str, Any], features_count: int
+) -> Tuple[NDArray, NDArray]:
+    t = time.time()
+
+    points, desc = pyfeatures.dspsift(
+        image.astype(np.float32) / 255,  # VlFeat expects pixel values between 0, 1
+        peak_threshold=0.0066666666666666671,
+        edge_threshold=10,
+        target_num_features=features_count,
+        feature_root=bool(config["feature_root"]),
+        estimate_affine_shape=False,
+    )
+
+    logger.debug("Found {0} points in {1}s".format(len(points), time.time() - t))
+    return points, desc
+
+
 def extract_features_orb(
     image: NDArray, config: Dict[str, Any], features_count: int
 ) -> Tuple[NDArray, NDArray]:
@@ -615,6 +647,8 @@ def extract_features(
         image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     else:
         image_gray = image
+
+    keypoints = None
     feature_type = config["feature_type"].upper()
     if feature_type == "SIFT":
         points, desc = extract_features_sift(image_gray, config, features_count)
@@ -626,9 +660,13 @@ def extract_features(
         points, desc = extract_features_hahog(image_gray, config, features_count)
     elif feature_type == "ORB":
         points, desc = extract_features_orb(image_gray, config, features_count)
+    elif feature_type == 'SIFT_GPU':
+        points, desc = extract_features_popsift(image_gray, config, features_count)
+    elif feature_type == 'DSPSIFT':
+        points, desc = extract_features_dspsift(image_gray, config, features_count)
     else:
         raise ValueError(
-            "Unknown feature type (must be SURF, SIFT, AKAZE, HAHOG or ORB)"
+            f"Unknown feature type {feature_type} (must be SURF, SIFT, AKAZE, HAHOG, SIFT_GPU, DSPSIFT, or ORB)"
         )
 
     xs = points[:, 0].round().astype(int)
@@ -636,6 +674,10 @@ def extract_features(
     colors = image[ys, xs]
     if image.shape[2] == 1:
         colors = np.repeat(colors, 3).reshape((-1, 3))
+
+    if keypoints is not None:
+        return normalize_features(points, desc, colors,
+                                  image.shape[1], image.shape[0]), keypoints
 
     return normalize_features(points, desc, colors, image.shape[1], image.shape[0])
 
