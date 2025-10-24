@@ -28,11 +28,13 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Install Python packages in the virtual environment
 RUN pip install \
+        beautifulsoup4==4.9.1 \
         cloudpickle==3.1.1 \
         ExifRead==3.5.1 \
         Flask==3.1.2 \
         fpdf2==2.8.4 \
         joblib==1.5.2 \
+        lxml==4.5.1 \
         matplotlib==3.10.6 \
         networkx==3.5 \
         numpy==1.26.4 \

@@ -22,11 +22,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN pip3 install \
+        beautifulsoup4==4.9.1 \
         cloudpickle==0.4.0 \
         ExifRead==2.1.2 \
         Flask==2.3.2 \
         fpdf2==2.4.6 \
         joblib==0.14.1 \
+        lxml==4.5.1 \
         matplotlib==3.7.5 \
         networkx==2.5 \
         numpy==1.24.4 \
