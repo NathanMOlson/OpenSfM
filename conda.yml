@@ -8,6 +8,7 @@ dependencies:
     - libxslt
     - libopencv *=headless*
     - py-opencv
+    - conda-forge::libvorbis
     - ceres-solver=2.1
     - conda-forge::llvm-openmp
     - conda-forge::cxx-compiler
