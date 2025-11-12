@@ -110,7 +110,7 @@ map::TracksManager InstanciateFromStreamV0(S& fstream) {
     SeparateLineByTabs(line, elems);
     if (elems.size() != N_ENTRIES)  // process only valid lines
     {
-      std::runtime_error(
+      throw std::runtime_error(
           "Encountered invalid line. A line must contain exactly " +
           std::to_string(N_ENTRIES) + " values!");
     }
@@ -140,7 +140,7 @@ map::TracksManager InstanciateFromStreamV1(S& fstream) {
     SeparateLineByTabs(line, elems);
     if (elems.size() != N_ENTRIES)  // process only valid lines
     {
-      std::runtime_error(
+      throw std::runtime_error(
           "Encountered invalid line. A line must contain exactly " +
           std::to_string(N_ENTRIES) + " values!");
     }
@@ -170,7 +170,7 @@ map::TracksManager InstanciateFromStreamV2(S& fstream) {
     SeparateLineByTabs(line, elems);
     if (elems.size() != N_ENTRIES)  // process only valid lines
     {
-      std::runtime_error(
+      throw std::runtime_error(
           "Encountered invalid line. A line must contain exactly " +
           std::to_string(N_ENTRIES) + " values!");
     }

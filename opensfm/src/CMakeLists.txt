@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.15)
 
 project(opensfm C CXX)
 
@@ -77,14 +77,35 @@ find_package(Eigen3 REQUIRED)
 find_package(Ceres REQUIRED)
 find_package(Gflags)
 
-find_package(OpenCV)
-# OpenCV's OpenCVConfig will enforce imgcodecs for < 3.0
-# (even if OPTIONAL_COMPONENTS) so we remove it as we don't need it
-# Cause is imread/imwrite moved to imgcodecs on > 3.0
-if(${OpenCV_VERSION} LESS 3.0)
-    find_package(OpenCV REQUIRED core imgproc calib3d)
+# Ceres2 exposes Ceres::ceres target.
+# Ceres1 exposes just ceres.
+# - if there's no such target, cmake will convert it into -lceres
+# and the linker will fail
+if(Ceres_ceres_FOUND)
+    set(CERES_LIBRARIES Ceres::ceres)
 else()
-    find_package(OpenCV REQUIRED core imgproc calib3d OPTIONAL_COMPONENTS imgcodecs)
+    set(CERES_LIBRARIES ceres)
+endif()
+
+# Only link against the OpenCV components we actually need
+# This avoids pulling in unnecessary dependencies like viz (which requires VTK)
+# OpenCV's OpenCVConfig will enforce imgcodecs for < 3.0
+# (even if OPTIONAL_COMPONENTS) so we handle version detection carefully
+# Cause is imread/imwrite moved to imgcodecs on > 3.0
+find_package(OpenCV QUIET)
+if(OpenCV_FOUND AND ${OpenCV_VERSION} VERSION_LESS "3.0")
+    find_package(OpenCV REQUIRED COMPONENTS core imgproc calib3d)
+else()
+    find_package(OpenCV REQUIRED COMPONENTS core imgproc calib3d
+                 OPTIONAL_COMPONENTS imgcodecs)
+endif()
+
+# Override OpenCV_LIBS to only include the components we explicitly requested
+# This prevents linking against all OpenCV modules
+# (especially viz which requires VTK)
+set(OpenCV_LIBS opencv_core opencv_imgproc opencv_calib3d)
+if(TARGET opencv_imgcodecs)
+    list(APPEND OpenCV_LIBS opencv_imgcodecs)
 endif()
 
 ####### Third party libraries #######
@@ -116,18 +137,21 @@ if (OPENSFM_BUILD_TESTS)
 
   # Gtest if old now and trigger these
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-missing-field-initializers")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-copy-with-user-provided-copy")
+  set(CMAKE_CXX_FLAGS
+      "${CMAKE_CXX_FLAGS} -Wno-deprecated-copy-with-user-provided-copy"
+  )
 
   add_library(gtest
               third_party/gtest/gmock_gtest_all.cc
               third_party/gtest/gmock_main.cc)
   target_include_directories(gtest PRIVATE ${GFLAGS_INCLUDE_DIR})
+  target_link_libraries(gtest PRIVATE glog::glog)
 
   set(TEST_MAIN test_main)
   add_library(${TEST_MAIN} testing_main.cc)
   target_link_libraries(${TEST_MAIN}
                         ${GFLAGS_LIBRARY}
-                        ${GLOG_LIBRARY}
+                        glog::glog
                         gtest)
 endif()
 

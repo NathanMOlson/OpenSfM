@@ -43,7 +43,7 @@ class Report:
             self.stats = self._read_stats_file("stats.json")
 
     def save_report(self, filename: str) -> None:
-        bytestring = self.pdf.output(dest="S")
+        bytestring = self.pdf.output()
         if isinstance(bytestring, str):
             bytestring = bytestring.encode("utf8")
 
