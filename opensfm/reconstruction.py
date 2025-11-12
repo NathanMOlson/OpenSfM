@@ -1770,6 +1770,7 @@ def triangulation_reconstruction(
     config_override = config.copy()
     config_override["triangulation_type"] = "ROBUST"
     config_override["bundle_max_iterations"] = 10
+    final_bundle_grid = config["final_bundle_grid"]
 
     report["steps"] = []
     outer_iterations = 3
@@ -1792,7 +1793,7 @@ def triangulation_reconstruction(
             logger.info(f"Triangulation SfM. Inner iteration {j}, running bundle ...")
             align_reconstruction(reconstruction, gcp, config_override)
             b1rep = bundle(
-                reconstruction, camera_priors, rig_camera_priors, None, config_override
+                reconstruction, camera_priors, rig_camera_priors, None, final_bundle_grid, config_override
             )
             remove_outliers(reconstruction, config_override)
             step["bundle"] = b1rep
@@ -1810,7 +1811,7 @@ def triangulation_reconstruction(
         overidden_bias_config["bundle_compensate_gps_bias"] = False
         config = overidden_bias_config
 
-    bundle(reconstruction, camera_priors, rig_camera_priors, gcp, config)
+    bundle(reconstruction, camera_priors, rig_camera_priors, gcp, final_bundle_grid, config)
     remove_outliers(reconstruction, config_override)
     paint_reconstruction(data, tracks_manager, reconstruction)
     return report, [reconstruction]
@@ -2080,6 +2081,7 @@ def planar_reconstruction(
         exit(1)
 
     min_inliers = data.config["five_point_algo_min_inliers"]
+    final_bundle_grid = data.config["final_bundle_grid"]
 
     data.init_reference(images)
     bundle_gcp = data.config["bundle_use_gcp"]
@@ -2227,7 +2229,7 @@ def planar_reconstruction(
     logger.info("Bundle adjustment")
     
     align_reconstruction(rec, gcp, data.config)
-    bundle(rec, camera_priors, rig_camera_priors, gcp, data.config)
+    bundle(rec, camera_priors, rig_camera_priors, gcp, final_bundle_grid, data.config)
     remove_outliers(rec, data.config)
     retriangulate(tracks_manager, rec, data.config)
     logger.info("Reconstructed %s points" % len(rec.points))
@@ -2236,7 +2238,7 @@ def planar_reconstruction(
         data.config["bundle_use_gcp"] = True
 
     align_reconstruction(rec, gcp, data.config)
-    bundle(rec, camera_priors, rig_camera_priors, gcp, data.config)
+    bundle(rec, camera_priors, rig_camera_priors, gcp, final_bundle_grid, data.config)
     remove_outliers(rec, data.config)
 
     align_reconstruction(rec, gcp, data.config)
