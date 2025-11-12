@@ -27,6 +27,6 @@ def run_dataset(
         reconstruction.add_correspondences_from_tracks_manager(tracks_manager)
         gcp = dataset.load_ground_control_points()
         orec.bundle(
-            reconstruction, camera_priors, rig_cameras_priors, gcp, dataset.config
+            reconstruction, camera_priors, rig_cameras_priors, gcp, , dataset.config["final_bundle_grid"], dataset.config
         )
     dataset.save_reconstruction(reconstructions, output)
