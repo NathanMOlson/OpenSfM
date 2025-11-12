@@ -77,16 +77,6 @@ find_package(Eigen3 REQUIRED)
 find_package(Ceres REQUIRED)
 find_package(Gflags)
 
-# Ceres2 exposes Ceres::ceres target.
-# Ceres1 exposes just ceres.
-# - if there's no such target, cmake will convert it into -lceres
-# and the linker will fail
-if(Ceres_ceres_FOUND)
-    set(CERES_LIBRARIES Ceres::ceres)
-else()
-    set(CERES_LIBRARIES ceres)
-endif()
-
 # Only link against the OpenCV components we actually need
 # This avoids pulling in unnecessary dependencies like viz (which requires VTK)
 # OpenCV's OpenCVConfig will enforce imgcodecs for < 3.0
