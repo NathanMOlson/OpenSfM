@@ -14,15 +14,15 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 class Report:
-    def __init__(self, data: DataSet) -> None:
+    def __init__(self, data: DataSet, stats = None) -> None:
         self.output_path: str = os.path.join(data.data_path, "stats")
         self.dataset_name: str = os.path.basename(data.data_path)
         self.io_handler: io.IoFilesystemBase = data.io_handler
 
-        self.mapi_light_light_green = [210, 245, 226]
-        self.mapi_light_green = [5, 203, 99]
+        self.mapi_light_light_green = [255, 255, 255]
+        self.mapi_light_green = [0, 0, 0]
         self.mapi_light_grey = [218, 222, 228]
-        self.mapi_dark_grey = [99, 115, 129]
+        self.mapi_dark_grey = [0, 0, 0]
 
         self.pdf = FPDF("P", "mm", "A4")
         self.pdf.add_page()
@@ -37,10 +37,13 @@ class Report:
         self.cell_height = 7
         self.total_size = 190
 
-        self.stats: Dict[str, Any] = self._read_stats_file("stats.json")
+        if stats is not None:
+            self.stats = stats
+        else:
+            self.stats = self._read_stats_file("stats.json")
 
     def save_report(self, filename: str) -> None:
-        bytestring = self.pdf.output(dest="S")
+        bytestring = self.pdf.output()
         if isinstance(bytestring, str):
             bytestring = bytestring.encode("utf8")
 
@@ -53,6 +56,9 @@ class Report:
         rows: List[List[str]],
         row_header: bool = False,
     ) -> None:
+        if len(rows) == 0:
+            logger.warning("Cannot make table (rows missing)")
+            return
         self.pdf.set_font("Helvetica", "", self.h3)
         self.pdf.set_line_width(0.3)
 
@@ -100,6 +106,12 @@ class Report:
         with self.io_handler.open_rt(file_path) as fin:
             return io.json_load(fin)
 
+    def _read_gcp_stats_file(self, filename):
+        file_path = os.path.join(self.output_path, "ground_control_points.json")
+        
+        with self.io_handler.open_rt(file_path) as fin:
+            return io.json_load(fin)
+
     def _make_section(self, title: str) -> None:
         self.pdf.set_font("Helvetica", "B", self.h1)
         self.pdf.set_text_color(*self.mapi_dark_grey)
@@ -140,20 +152,17 @@ class Report:
         # title
         self.pdf.set_font("Helvetica", "B", self.title_size)
         self.pdf.set_text_color(*self.mapi_light_green)
-        self.pdf.cell(0, self.margin, "OpenSfM Quality Report", align="C")
+        self.pdf.cell(0, self.margin, "ODM Quality Report", align="C")
         self.pdf.set_xy(self.margin, self.title_size)
 
         # version number
+        version_file = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..", "VERSION")
+        version = ""
         try:
-            out, _ = subprocess.Popen(
-                ["git", "describe", "--tags"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            ).communicate()
-            version = out.strip().decode()
-        except BaseException as e:
-            logger.warning(f"Exception thrwon while extracting 'git' version, {e}")
-            version = ""
+            with open(version_file, 'r') as f:
+               version = f.read().strip()
+        except Exception as e:
+            logger.warning("Invalid version file" + version_file + ": " + str(e))
 
         # indicate we don't know the version
         version = "unknown" if version == "" else version
@@ -161,7 +170,7 @@ class Report:
         self.pdf.set_font("Helvetica", "", self.small_text)
         self.pdf.set_text_color(*self.mapi_dark_grey)
         self.pdf.cell(
-            0, self.margin, f"Processed with OpenSfM version {version}", align="R"
+            0, self.margin, f"Processed with ODM version {version}", align="R"
         )
         self.pdf.set_xy(self.margin, self.pdf.get_y() + 2 * self.margin)
 
@@ -169,7 +178,7 @@ class Report:
         self._make_section("Dataset Summary")
 
         rows = [
-            ["Dataset", self.dataset_name],
+            #["Dataset", self.dataset_name],
             ["Date", self.stats["processing_statistics"]["date"]],
             [
                 "Area Covered",
@@ -179,7 +188,11 @@ class Report:
                 "Processing Time",
                 f"{self.stats['processing_statistics']['steps_times']['Total Time']:.2f} seconds",
             ],
+            ["Capture Start", self.stats["processing_statistics"]["start_date"]],
+            ["Capture End", self.stats["processing_statistics"]["end_date"]],
         ]
+        if self.stats.get('odm_processing_statistics') and self.stats['odm_processing_statistics'].get('total_time_human'):
+            rows[2][1] = self.stats['odm_processing_statistics']['total_time_human']
         self._make_table(None, rows, True)
         self.pdf.set_xy(self.margin, self.pdf.get_y() + self.margin)
 
@@ -206,6 +219,12 @@ class Report:
             geo_string.append("GPS")
         if self._has_meaningful_gcp():
             geo_string.append("GCP")
+        
+        if "align" in self.stats:
+            geo_string = ["Alignment"]
+
+        if len(geo_string) == 0:
+            geo_string = ["None"]
 
         ratio_shots = rec_shots / init_shots * 100 if init_shots > 0 else -1
         rows = [
@@ -214,37 +233,58 @@ class Report:
                 f"{rec_shots} over {init_shots} shots ({ratio_shots:.1f}%)",
             ],
             [
-                "Reconstructed Points",
+                "Reconstructed Points (Sparse)",
                 f"{rec_points} over {init_points} points ({rec_points/init_points*100:.1f}%)",
             ],
-            [
-                "Reconstructed Components",
-                f"{self.stats['reconstruction_statistics']['components']} component",
-            ],
+            # [
+            #     "Reconstructed Components",
+            #     f"{self.stats['reconstruction_statistics']['components']} component",
+            # ],
             [
                 "Detected Features",
-                f"{self.stats['features_statistics']['detected_features']['median']} features",
+                f"{self.stats['features_statistics']['detected_features']['median']:,} features",
             ],
             [
                 "Reconstructed Features",
-                f"{self.stats['features_statistics']['reconstructed_features']['median']} features",
+                f"{self.stats['features_statistics']['reconstructed_features']['median']:,} features",
             ],
             ["Geographic Reference", " and ".join(geo_string)],
         ]
 
+        # Dense (if available)
+        if self.stats.get('point_cloud_statistics'):
+            if self.stats['point_cloud_statistics'].get('dense'):
+                rows.insert(2, [
+                    "Reconstructed Points (Dense)",
+                    f"{self.stats['point_cloud_statistics']['stats']['statistic'][0]['count']:,} points"
+                ])
+
+        # GSD (if available)
+        if self.stats.get('odm_processing_statistics') and self.stats['odm_processing_statistics'].get('average_gsd'):
+            rows.insert(3, [
+                "Average Ground Sampling Distance (GSD)",
+                f"{self.stats['odm_processing_statistics']['average_gsd']:.1f} cm"
+            ])
+        
         row_gps_gcp = [" / ".join(geo_string) + " errors"]
         geo_errors = []
-        if self.stats["reconstruction_statistics"]["has_gps"]:
-            geo_errors.append(f"{self.stats['gps_errors']['average_error']:.2f}")
-        if self._has_meaningful_gcp():
-            geo_errors.append(f"{self.stats['gcp_errors']['average_error']:.2f}")
-        row_gps_gcp.append(" / ".join(geo_errors) + " meters")
-        rows.append(row_gps_gcp)
+        
+        if not "align" in self.stats:
+            if self.stats["reconstruction_statistics"]["has_gps"]:
+                geo_errors.append(f"{self.stats['gps_errors']['average_error']:.2f}")
+            if self._has_meaningful_gcp():
+                geo_errors.append(f"{self.stats['gcp_errors']['average_error']:.2f}")
+        else:
+            geo_errors.append(f"{(self.stats['align']['coarse']['rmse_3d'] + self.stats['align']['fine']['rmse_3d']):.2f}")
+        
+        if len(geo_errors) > 0:
+            row_gps_gcp.append(" / ".join(geo_errors) + " meters")
+            rows.append(row_gps_gcp)
 
         self._make_table(None, rows, True)
         self.pdf.set_xy(self.margin, self.pdf.get_y() + self.margin / 2)
 
-        topview_height = 130
+        topview_height = 110
         topview_grids = [
             f for f in self.io_handler.ls(self.output_path) if f.startswith("topview")
         ]
@@ -265,13 +305,34 @@ class Report:
         self._make_table(columns_names, rows)
         self.pdf.set_xy(self.margin, self.pdf.get_y() + 2 * self.margin)
 
+    def make_gcp_error_details(self):
+        self._make_section("Ground Control Point Error")
+
+        gcp_stats = self._read_gcp_stats_file("ground_control_points.json")
+
+        rows = []
+        column_names = ["ID", "Error X (m)", "Error Y (m)", "Error Z (m)"]
+
+        for gcp in gcp_stats:
+            gcp_id = ''.join(c if ord(c) < 256 else '?' for c in gcp["id"]) # latin-1 only due to fpdf2 requirements
+            row = [gcp_id]
+            row.append(f"{gcp['error'][0]:.3f}")
+            row.append(f"{gcp['error'][1]:.3f}")
+            row.append(f"{gcp['error'][2]:.3f}")
+
+            rows.append(row)
+
+        self._make_table(column_names, rows)
+        self.pdf.set_xy(self.margin, self.pdf.get_y() + self.margin / 2)
+
     def make_gps_details(self) -> None:
-        self._make_section("GPS/GCP Errors Details")
+        self._make_section("GPS/GCP/3D Errors Details")
 
         # GPS
-        for error_type in ["gps", "gcp"]:
+        table_count = 0
+        for error_type in ["gps", "gcp", "3d"]:
             rows = []
-            columns_names = [error_type.upper(), "Mean", "Sigma", "RMS Error"]
+            columns_names = [error_type.upper(), "Mean", "Standard Deviation", "RMS Error"]
             if "average_error" not in self.stats[error_type + "_errors"]:
                 continue
             for comp in ["x", "y", "z"]:
@@ -291,28 +352,75 @@ class Report:
             )
             self._make_table(columns_names, rows)
             self.pdf.set_xy(self.margin, self.pdf.get_y() + self.margin / 2)
+            table_count += 1
 
-        rows = []
-        columns_names = [
-            "GPS Bias",
-            "Scale",
-            "Translation",
-            "Rotation",
-        ]
-        for camera, params in self.stats["camera_errors"].items():
-            bias = params["bias"]
-            s, t, R = bias["scale"], bias["translation"], bias["rotation"]
-            rows.append(
-                [
-                    camera,
-                    f"{s:.2f}",
-                    f"{t[0]:.2f}      {t[1]:.2f}      {t[2]:.2f}",
-                    f"{R[0]:.2f}      {R[1]:.2f}      {R[2]:.2f}",
-                ]
-            )
-        self._make_table(columns_names, rows)
+        if table_count > 0:
+            abs_error_type = "gps" if table_count == 2 else "gcp"
+
+            a_ce90 = self.stats[abs_error_type + "_errors"].get("ce90", 0)
+            a_le90 = self.stats[abs_error_type + "_errors"].get("le90", 0)
+            r_ce90 = self.stats["3d_errors"].get("ce90", 0)
+            r_le90 = self.stats["3d_errors"].get("le90", 0)
+
+            rows = []
+            if a_ce90 > 0 and a_le90 > 0:
+                rows += [[
+                    "Horizontal Accuracy CE90 (meters)",
+                    f"{a_ce90:.3f}",
+                    f"{r_ce90:.3f}" if r_ce90 > 0 else "-",
+                ],[
+                    "Vertical Accuracy LE90 (meters)",
+                    f"{a_le90:.3f}",
+                    f"{r_le90:.3f}" if r_le90 > 0 else "-",
+                ]]
+            
+            if rows:
+                if table_count > 2:
+                    self.add_page_break()
+                self._make_table(["", "Absolute", "Relative"], rows, True)
+                self.pdf.set_xy(self.margin, self.pdf.get_y() + self.margin / 2)
+
+        # rows = []
+        # columns_names = [
+        #     "GPS Bias",
+        #     "Scale",
+        #     "Translation",
+        #     "Rotation",
+        # ]
+        # for camera, params in self.stats["camera_errors"].items():
+        #     bias = params["bias"]
+        #     s, t, R = bias["scale"], bias["translation"], bias["rotation"]
+        #     rows.append(
+        #         [
+        #             camera,
+        #             f"{s:.2f}",
+        #             f"{t[0]:.2f}      {t[1]:.2f}      {t[2]:.2f}",
+        #             f"{R[0]:.2f}      {R[1]:.2f}      {R[2]:.2f}",
+        #         ]
+        #     )
+        # self._make_table(columns_names, rows)
 
         self.pdf.set_xy(self.margin, self.pdf.get_y() + self.margin / 2)
+
+    def make_align_details(self) -> None:
+        self._make_section("Alignment Errors Details")
+
+        # Alignment
+        rows = []
+        columns_names = ["", "DSM (Coarse)", "ICP (Fine)", "RMS Error"]
+        for comp in ["x", "y", "z", "3d"]:
+            row = [comp.upper() + " Error (meters)"]
+            row.append(f"{self.stats['align']['coarse']['rmse_' + comp]:.3f}")
+            row.append(f"{self.stats['align']['fine']['rmse_' + comp]:.3f}")
+            row.append(f"{(self.stats['align']['coarse']['rmse_' + comp] + self.stats['align']['fine']['rmse_' + comp]):.3f}")
+            rows.append(row)
+
+        self._make_table(columns_names, rows)
+        self.pdf.set_xy(self.margin, self.pdf.get_y() + self.margin / 2)
+
+        dsm_feature_matches = os.path.join(self.output_path, "codem", "dsm_feature_matches.png")
+        if os.path.isfile(dsm_feature_matches):
+            self._make_centered_image(dsm_feature_matches, 80)
 
     def make_features_details(self) -> None:
         self._make_section("Features Details")
@@ -483,10 +591,98 @@ class Report:
     def add_page_break(self) -> None:
         self.pdf.add_page("P")
 
+    def make_survey_data(self):
+        self._make_section("Survey Data")
+
+        self._make_centered_image(
+            os.path.join(self.output_path, "overlap.png"), 90
+        )
+        self._make_centered_image(
+            os.path.join(self.output_path, "overlap_diagram_legend.png"), 3
+        )
+
+        self.pdf.set_xy(self.margin, self.pdf.get_y() + self.margin / 2)
+
+
+    def _add_image_label(self, text):
+        self.pdf.set_font_size(self.small_text)
+        self.pdf.text(self.pdf.get_x() + self.total_size / 2 - self.pdf.get_string_width(text) / 2, self.pdf.get_y() - 5, text)
+
+
+    def make_preview(self):
+        ortho = os.path.join(self.output_path, "ortho.png")
+        dsm = os.path.join(self.output_path, "dsm.png")
+        dtm = os.path.join(self.output_path, "dtm.png")
+        count = 0
+
+        if os.path.isfile(ortho) or os.path.isfile(dsm):
+            self._make_section("Previews")
+            
+            if os.path.isfile(ortho):
+                self._make_centered_image(
+                    os.path.join(self.output_path, ortho), 110
+                )
+                self._add_image_label("Orthophoto")
+                count += 1
+
+            if os.path.isfile(dsm) and self.stats.get('dsm_statistics'):
+                self._make_centered_image(
+                    os.path.join(self.output_path, dsm), 110
+                )
+                self._add_image_label("Digital Surface Model")
+
+                self._make_centered_image(
+                    os.path.join(self.output_path, "dsm_gradient.png"), 4
+                )
+                self.pdf.set_font_size(self.small_text)
+                min_text = "{:,.2f}m".format(self.stats['dsm_statistics']['min'])
+                max_text = "{:,.2f}m".format(self.stats['dsm_statistics']['max'])
+                self.pdf.text(self.pdf.get_x() + 40, self.pdf.get_y() - 5, min_text)
+                self.pdf.text(self.pdf.get_x() + 40 + 110.5 - self.pdf.get_string_width(max_text), self.pdf.get_y() - 5, max_text)
+                count += 1
+
+            if os.path.isfile(dtm) and self.stats.get('dtm_statistics'):
+                if count >= 2:
+                    self.add_page_break()
+
+                self._make_centered_image(
+                    os.path.join(self.output_path, dtm), 110
+                )
+                self._add_image_label("Digital Terrain Model")
+
+                self._make_centered_image(
+                    os.path.join(self.output_path, "dsm_gradient.png"), 4
+                )
+                self.pdf.set_font_size(self.small_text)
+                min_text = "{:,.2f}m".format(self.stats['dtm_statistics']['min'])
+                max_text = "{:,.2f}m".format(self.stats['dtm_statistics']['max'])
+                self.pdf.text(self.pdf.get_x() + 40, self.pdf.get_y() - 5, min_text)
+                self.pdf.text(self.pdf.get_x() + 40 + 110.5 - self.pdf.get_string_width(max_text), self.pdf.get_y() - 5, max_text)
+
+            self.pdf.set_xy(self.margin, self.pdf.get_y() + self.margin)
+
+            return True
+
     def generate_report(self) -> None:
         self.make_title()
         self.make_dataset_summary()
         self.make_processing_summary()
+        self.add_page_break()
+
+        if self.make_preview():
+            self.add_page_break()
+
+        if os.path.isfile(os.path.join(self.output_path, "overlap.png")):
+            self.make_survey_data()
+        
+        if "align" not in self.stats:
+            self.make_gps_details()
+
+            if os.path.isfile(os.path.join(self.output_path, "ground_control_points.json")):
+                self.make_gcp_error_details()
+        else:
+            self.make_align_details()
+
         self.add_page_break()
 
         self.make_features_details()
@@ -495,8 +691,4 @@ class Report:
 
         self.make_tracks_details()
         self.make_camera_models_details()
-        self.make_rig_cameras_details()
-        self.add_page_break()
-
-        self.make_gps_details()
-        self.make_processing_time_details()
+        #self.make_rig_cameras_details()

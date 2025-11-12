@@ -1,7 +1,8 @@
 # pyre-strict
 import itertools
 import logging
-from typing import Dict, Iterator, List, Optional, Tuple
+import os
+from typing import Callable, Dict, Iterator, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -39,9 +40,9 @@ def undistort_reconstruction(
     undistorted_shots = {}
     for shot in reconstruction.shots.values():
         if shot.id not in all_images:
-            logger.warning(
-                f"Not undistorting {shot.id} as it is missing from the dataset's input images."
-            )
+            # logger.warning(
+            #     f"Not undistorting {shot.id} as it is missing from the dataset's input images."
+            # )
             continue
         if shot.camera.projection_type == "perspective":
             urec.add_camera(perspective_camera_from_perspective(shot.camera))
@@ -85,21 +86,26 @@ def undistort_reconstruction(
 
     return undistorted_shots
 
+_camera_mapping_cache = {}
 
 def undistort_reconstruction_with_images(
     tracks_manager: Optional[pymap.TracksManager],
     reconstruction: types.Reconstruction,
     data: DataSetBase,
     udata: UndistortedDataSet,
+    imageFilter: Callable[[str, np.ndarray], np.ndarray] = None,
     skip_images: bool = False,
 ) -> Dict[pymap.Shot, List[pymap.Shot]]:
+    global _camera_mapping_cache
+    _camera_mapping_cache = {}
+
     undistorted_shots = undistort_reconstruction(
         tracks_manager, reconstruction, data, udata
     )
     if not skip_images:
         arguments = []
         for shot_id, subshots in undistorted_shots.items():
-            arguments.append((reconstruction.shots[shot_id], subshots, data, udata))
+            arguments.append((reconstruction.shots[shot_id], subshots, data, udata, imageFilter))
 
         processes = data.config["processes"]
 
@@ -122,13 +128,69 @@ def undistort_reconstruction_with_images(
             )
 
         parallel_map(undistort_image_and_masks, arguments, processes)
+    
+    dump_camera_mapping_cache(os.path.join(data.data_path, "camera_mappings.npz"))
+
+    _camera_mapping_cache = {}
     return undistorted_shots
 
 
+def dump_camera_mapping_cache(dest_file):
+    global _camera_mapping_cache
+
+    ids = []
+    outs = {}
+
+    def cast_to_max(arr):
+        m = np.max(arr)
+        if m <= 255:
+            return arr.astype(np.uint8)
+        elif m <= 65535:
+            return arr.astype(np.uint16)
+        else:
+            return arr.astype(np.uint32)
+
+    # Dump the camera mappings information for each camera
+    # compressing the numbers by rounding to nearest int * mul
+    # and then by attempting to offset the values
+    # the original value of the map can then be computed with:
+    # map1[px_y, px_x] <--> ((compressed_map1[px_y,px_x] + offset[0]) / 10.0) + px_x
+    # map2[px_y, px_x] <--> ((compressed_map2[px_y,px_x] + offset[1]) / 10.0) + px_y
+    # (note our values are rounded to 1/10th of a pixel)
+    idx = 0
+    for key, v in _camera_mapping_cache.items():
+        ids.append(v['id'])
+        map1, map2 = v['map']
+        mul = 10.0 # keep precision up to 1/10th of a pixel
+
+        i = np.arange(map1.shape[0]).reshape(-1, 1)
+        j = np.arange(map1.shape[1])
+        map1 -= j
+        map2 -= i
+        map1 = np.round(map1 * mul)
+        map2 = np.round(map2 * mul)
+
+        offset = np.array([np.min(map1), np.min(map2)])
+        map1 -= offset[0]
+        map2 -= offset[1]
+
+        map1 = cast_to_max(map1)
+        map2 = cast_to_max(map2)
+
+        outs['%s_x' % idx] = map1
+        outs['%s_y' % idx] = map2
+        outs['%s_offset' % idx] = offset
+        outs['%s_mul' % idx] = np.array([mul])
+
+        idx += 1
+
+    np.savez_compressed(dest_file, ids=ids, **outs)
+
+
 def undistort_image_and_masks(
-    arguments: Tuple[pymap.Shot, List[pymap.Shot], DataSetBase, UndistortedDataSet],
+    arguments: Tuple[pymap.Shot, List[pymap.Shot], DataSetBase, UndistortedDataSet, Callable[[str, NDArray], NDArray]],
 ) -> None:
-    shot, undistorted_shots, data, udata = arguments
+    shot, undistorted_shots, data, udata, imageFilter = arguments
     log.setup()
     logger.debug("Undistorting image {}".format(shot.id))
     max_size = data.config["undistorted_image_max_size"]
@@ -136,6 +198,8 @@ def undistort_image_and_masks(
     # Undistort image
     image = data.load_image(shot.id, unchanged=True, anydepth=True)
     if image is not None:
+        if hasattr(imageFilter, '__call__'):
+            image = imageFilter(shot.id, image)
         undistorted = undistort_image(
             shot, undistorted_shots, image, cv2.INTER_AREA, max_size
         )
@@ -159,6 +223,24 @@ def undistort_image_and_masks(
         )
         for k, v in undistorted.items():
             udata.save_undistorted_segmentation(k, v)
+
+
+def compute_camera_mapping_cached(camera, new_camera, width, height):
+    global _camera_mapping_cache
+    key = "%s-%s-%s-%s" % (camera.id, new_camera.id, width, height)
+
+    if key in _camera_mapping_cache:
+        return _camera_mapping_cache[key]['map']
+    
+    map1, map2 = pygeometry.compute_camera_mapping(
+        camera, new_camera, width, height
+    )
+
+    _camera_mapping_cache[key] = {
+        'map': (map1, map2),
+        'id': camera.id
+    }
+    return _camera_mapping_cache[key]['map']
 
 
 def undistort_image(
@@ -193,7 +275,7 @@ def undistort_image(
         [undistorted_shot] = undistorted_shots
         new_camera = undistorted_shot.camera
         height, width = original.shape[:2]
-        map1, map2 = pygeometry.compute_camera_mapping(
+        map1, map2 = compute_camera_mapping_cached(
             shot.camera, new_camera, width, height
         )
         undistorted = cv2.remap(original, map1, map2, interpolation)

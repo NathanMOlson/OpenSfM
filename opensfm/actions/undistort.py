@@ -4,6 +4,8 @@ from typing import Optional
 
 from opensfm import dataset, undistort
 from opensfm.dataset import DataSet
+from typing import Callable
+import numpy as np
 
 
 def run_dataset(
@@ -12,6 +14,7 @@ def run_dataset(
     reconstruction_index: int = 0,
     tracks: Optional[str] = None,
     output: str = "undistorted",
+    imageFilter: Callable[[str, np.ndarray], np.ndarray] = None,
     skip_images: bool = False,
 ) -> None:
     """Export reconstruction to NVM_V3 format from VisualSfM
@@ -36,5 +39,5 @@ def run_dataset(
     if reconstructions:
         r = reconstructions[reconstruction_index]
         undistort.undistort_reconstruction_with_images(
-            tracks_manager, r, data, udata, skip_images
+            tracks_manager, r, data, udata, imageFilter, skip_images
         )

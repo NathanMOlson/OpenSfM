@@ -66,6 +66,9 @@ def _extract_exif(image: str, data: DataSetBase) -> Dict[str, Any]:
 
     if data.config.get("default_projection_type"):
         d["projection_type"] = data.config.get("default_projection_type")
+    
+    if data.config.get("camera_projection_type") != 'AUTO':
+        d['projection_type'] = data.config['camera_projection_type'].lower()
 
     d["camera"] = exif.camera_id(d)
 

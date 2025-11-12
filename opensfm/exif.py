@@ -3,6 +3,8 @@
 import datetime
 import logging
 from codecs import decode, encode
+from bs4 import BeautifulSoup
+from codecs import decode, encode
 from typing import Any, BinaryIO, Callable, Dict, List, Optional, Tuple, Union
 
 import exifread
@@ -138,8 +140,12 @@ def parse_xmp_string(xmp_str: str) -> Optional[Dict[str, Any]]:
     for _ in range(2):
         try:
             return x2d.parse(xmp_str)
-        except Exception:
-            xmp_str = unescape_string(xmp_str)
+        except:
+            xmp_str = str(BeautifulSoup(xmp_str, 'xml'))
+            try:
+                return x2d.parse(xmp_str)
+            except:
+                pass
     return None
 
 
@@ -169,6 +175,13 @@ def get_gpano_from_xmp(xmp: List[Dict[str, Any]]) -> Dict[str, Any]:
     for i in xmp:
         for k in i:
             if "GPano" in k:
+                return i
+    return {}
+
+def get_pix4d_from_xmp(xmp):
+    for i in xmp:
+        for k in i:
+            if '@Camera:ModelType' in k:
                 return i
     return {}
 
@@ -243,8 +256,19 @@ class EXIF:
         return self._decode_make_model(model)
 
     def extract_projection_type(self) -> str:
+        projections = ['perspective', 'fisheye', 'brown', 'dual', 'equirectangular', 'spherical']
+
         gpano = get_gpano_from_xmp(self.xmp)
-        return gpano.get("GPano:ProjectionType", "perspective")
+        gpano_projection = gpano.get('GPano:ProjectionType', "").lower()
+        if gpano_projection in projections:
+            return gpano_projection
+        
+        pix4d = get_pix4d_from_xmp(self.xmp)
+        camera_model = pix4d.get('@Camera:ModelType', "").lower()
+        if camera_model in projections:
+            return camera_model
+       
+        return 'brown'
 
     def extract_focal(self) -> Tuple[float, float]:
         make, model = self.extract_make(), self.extract_model()
@@ -467,16 +491,6 @@ class EXIF:
                             'Naively assuming UTC on "{0:s}" in image file '
                             '"{1:s}"'.format(datetime_tag, self.fileobj_name)
                         )
-                else:
-                    logger.debug(
-                        "No GPS time stamp and no time zone offset in image "
-                        'file "{0:s}"'.format(self.fileobj_name)
-                    )
-                    logger.debug(
-                        'Naively assuming UTC on "{0:s}" in image file "{1:s}"'.format(
-                            datetime_tag, self.fileobj_name
-                        )
-                    )
                 return (d - datetime.datetime(1970, 1, 1)).total_seconds()
         logger.info(
             'Image file "{0:s}" has no valid time stamp'.format(self.fileobj_name)
@@ -530,7 +544,7 @@ class EXIF:
                     )
                 )
 
-            if np.all(ypr) is not None:
+            if not any(v is None for v in ypr):
                 ypr = np.radians(ypr)
 
                 # Convert YPR --> OPK
@@ -635,6 +649,8 @@ class EXIF:
 
 
 def hard_coded_calibration(exif: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    return None # Disable hard coded calibrations
+
     focal = exif["focal_ratio"]
     fmm35 = int(round(focal * 36.0))
     make = exif["make"].strip().lower()

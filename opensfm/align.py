@@ -24,7 +24,7 @@ def align_reconstruction(
 ) -> Optional[Tuple[float, NDArray, NDArray]]:
     """Align a reconstruction with GPS and GCP data."""
     has_scaled_rigs = any(
-        [True for ri in reconstruction.rig_instances.values() if len(ri.shots) > 1]
+        True for ri in reconstruction.rig_instances.values() if len(ri.shots) > 1
     )
     use_scale = not has_scaled_rigs
     if bias_override and config["bundle_compensate_gps_bias"]:
@@ -277,14 +277,10 @@ def compute_orientation_prior_similarity(
 
         # Clamp shots pair scale to 1km, so the
         # optimizer can still catch-up acceptable error
-        max_scale = 1000
+        max_scale = 1000.0
         current_scale = np.linalg.norm(b)
         if two_shots and current_scale > max_scale:
-            # pyre-fixme[58]: `/` is not supported for operand types `int` and
-            #  `floating[typing.Any]`.
             b = max_scale * b / current_scale
-            # pyre-fixme[58]: `/` is not supported for operand types `int` and
-            #  `floating[typing.Any]`.
             s = max_scale / current_scale
     else:
         try:
@@ -347,7 +343,7 @@ def set_gps_bias(
             subrec, [], config, True, use_scale
         )
 
-    if any([True for x in per_camera_transform.values() if not x]):
+    if any(True for x in per_camera_transform.values() if not x):
         logger.warning("Cannot compensate some shots, GPS bias won't be compensated.")
     else:
         for camera_id, transform in per_camera_transform.items():

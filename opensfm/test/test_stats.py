@@ -16,7 +16,7 @@ def test_processing_statistics_normal(
 
     processing_statistics = stats.processing_statistics(dataset, [reference])
 
-    assert list(processing_statistics.keys()) == ["steps_times", "date", "area"]
+    assert list(processing_statistics.keys()) == ["steps_times", "date", "start_date", "end_date", "area"]
     assert processing_statistics["steps_times"] == {
         "Feature Extraction": -1,
         "Features Matching": -1,
@@ -41,7 +41,7 @@ def test_processing_statistics_null(
 
     processing_statistics = stats.processing_statistics(dataset, [null_scene])
 
-    assert list(processing_statistics.keys()) == ["steps_times", "date", "area"]
+    assert list(processing_statistics.keys()) == ["steps_times", "date", "start_date", "end_date", "area"]
     assert processing_statistics["steps_times"] == {
         "Feature Extraction": -1,
         "Features Matching": -1,
@@ -257,7 +257,7 @@ def test_gps_errors_normal(
 ) -> None:
     reference = scene_synthetic.reconstruction
     gps_errors = stats.gps_errors([reference])
-    assert set(gps_errors.keys()) == {"average_error", "error", "mean", "std"}
+    assert set(gps_errors.keys()) == {"average_error", "error", "mean", "std", "le90", "ce90"}
     # scene_synthetic generated GPS noise is 5 meters
     assert 3.0 < gps_errors["average_error"] < 7.0
 

@@ -25,10 +25,19 @@ from numpy.typing import NDArray
 from opensfm import context, features, geo, pygeometry, pymap, types
 from PIL import Image
 
-logger: logging.Logger = logging.getLogger(__name__)
+import rasterio
+import rawpy
+import sys
+from rasterio.plot import reshape_as_image
+import warnings
+warnings.filterwarnings("ignore", category=rasterio.errors.NotGeoreferencedWarning)
 
 JSONType = Any  # pyre-ignore[33]
 
+
+logger: logging.Logger = logging.getLogger(__name__)
+logging.getLogger("rasterio").setLevel(logging.WARNING)
+logging.getLogger("PIL").setLevel(logging.WARNING)
 
 def camera_from_json(key: str, obj: Dict[str, Any]) -> pygeometry.Camera:
     """
@@ -841,7 +850,7 @@ def _read_gcp_list_lines(
 ) -> List[pymap.GroundControlPoint]:
     points = {}
     for line in lines:
-        words = line.split(None, 5)
+        words = line.split(None, 6)
         easting, northing, alt, pixel_x, pixel_y = map(float, words[:5])
         key = (easting, northing, alt)
 
@@ -865,7 +874,11 @@ def _read_gcp_list_lines(
                 lon, lat = easting, northing
 
             point = pymap.GroundControlPoint()
-            point.id = "unnamed-%d" % len(points)
+            if len(words) > 6:
+                point.id = words[6].strip()
+            else:
+                point.id = "GCP-%d" % len(points)
+
             point.lla = {"latitude": lat, "longitude": lon, "altitude": alt}
             point.has_altitude = has_altitude
 
@@ -1212,8 +1225,14 @@ def open_rt(path: str) -> TextIO:
 def imread(
     path: str, grayscale: bool = False, unchanged: bool = False, anydepth: bool = False
 ) -> NDArray:
-    with open(path, "rb") as fb:
-        return imread_from_fileobject(fb, grayscale, unchanged, anydepth)
+    _, ext = os.path.splitext(path)
+    if ext.lower() == ".tiff" or ext.lower() == ".tif":
+        return imread_rasterio(path, grayscale, unchanged, anydepth)
+    elif ext.lower() in [".dng", ".raw", ".nef"]:
+        return imread_rawpy(path, grayscale, unchanged, anydepth)
+    else:
+        with open(path, "rb") as fb:
+            return imread_from_fileobject(fb, grayscale, unchanged, anydepth)
 
 
 def imread_from_fileobject(
@@ -1261,12 +1280,67 @@ def imread_from_fileobject(
 
     if len(image.shape) == 3:
         image[:, :, :3] = image[:, :, [2, 1, 0]]  # Turn BGR to RGB (or BGRA to RGBA)
+    elif len(image.shape) == 2:
+        image = image[..., np.newaxis] # Make sure we always have a band dimension
+
     return image
 
 
-def imwrite(path: str, image: NDArray) -> None:
-    with open(path, "wb") as fwb:
-        return imwrite_from_fileobject(fwb, image, path)
+def imread_rasterio(path, grayscale=False, unchanged=False, anydepth=False):
+    """Load image as an array ignoring EXIF orientation."""
+    if grayscale:
+        raise IOError("Grayscale not implemented")
+
+    with rasterio.open(path, "r") as f:
+        image = reshape_as_image(f.read())
+
+    return _imread_postprocess(image, grayscale, unchanged, anydepth)
+
+
+def imread_rawpy(path, grayscale=False, unchanged=False, anydepth=False):
+    if grayscale:
+        raise IOError("Grayscale not implemented")
+
+    with rawpy.imread(path) as r:
+        image = r.postprocess(output_bps=16, use_camera_wb=True, use_auto_wb=False)
+
+    return _imread_postprocess(image, grayscale, unchanged, anydepth)
+
+
+def _imread_postprocess(image, grayscale=False, unchanged=False, anydepth=False):
+    if image is None: 
+        raise IOError("Unable to load image {}".format(path))
+
+    if not anydepth or not unchanged:
+        # Normalize to 8bit
+        min_value = float(image.min())
+        value_range = float(image.max()) - min_value
+        
+        image = image.astype(np.float32)
+        image -= min_value
+        image *= 255.0 / value_range
+        np.around(image, out=image)
+        image[image > 255] = 255
+        image[image < 0] = 0
+        image = image.astype(np.uint8)
+
+    if not unchanged:
+        # Convert to RGB
+        if image.shape[2] == 1:
+            image = np.repeat(image[:, :, :], 3, axis=2)
+        elif image.shape[2] > 3:
+            image = image[:,:,:3]
+
+    return image
+
+
+def imwrite(path, image: NDArray) -> None:
+    _, ext = os.path.splitext(path)
+    if ext.lower() == ".tiff" or ext.lower() == ".tif":
+        return imwrite_rasterio(path, image)
+    else:
+        with open(path, "wb") as fwb:
+            return imwrite_from_fileobject(fwb, image, ext)
 
 
 def imwrite_from_fileobject(
@@ -1277,6 +1351,29 @@ def imwrite_from_fileobject(
         image[:, :, :3] = image[:, :, [2, 1, 0]]  # Turn RGB to BGR (or RGBA to BGRA)
     _, im_buffer = cv2.imencode(ext, image)
     fwb.write(im_buffer)
+
+
+def imwrite_rasterio(path, image: np.ndarray):
+    if len(image.shape) == 2:
+        image = np.repeat(image[:, :, np.newaxis], 1, axis=2)
+
+    profile =  {
+        'width': image.shape[1], 
+        'height': image.shape[0], 
+        'count': image.shape[2],
+        'blockxsize': 512,
+        'blockysize': 512,
+        'compress': 'lzw',
+        'predictor': 3 if image.dtype == np.float32 else 2,
+        'driver': 'GTiff',
+        'dtype': image.dtype,
+        'interleave': 'pixel',
+        'tiled': False
+    }
+
+    with rasterio.open(path, "w", **profile) as f:
+        for b in range(0, image.shape[2]):
+            f.write(image[:,:,b], b + 1)
 
 
 def image_size_from_fileobject(
@@ -1403,6 +1500,8 @@ class IoFilesystemDefault(IoFilesystemBase):
 
     @classmethod
     def symlink(cls, src_path: str, dst_path: str, **kwargs: Any) -> None:
+        if sys.platform == 'win32':
+            raise Exception("symlinks are not supported on win32")
         os.symlink(src_path, dst_path, **kwargs)
 
     @classmethod
@@ -1437,19 +1536,33 @@ class IoFilesystemDefault(IoFilesystemBase):
         unchanged: bool = False,
         anydepth: bool = False,
     ) -> NDArray:
-        with cls.open_rb(path) as fb:
-            return imread_from_fileobject(fb, grayscale, unchanged, anydepth)
+        _, ext = os.path.splitext(path)
+        if ext.lower() == ".tiff" or ext.lower() == ".tif":
+            return imread_rasterio(path, grayscale, unchanged, anydepth)
+        elif ext.lower() in [".dng", ".raw", ".nef"]:
+            return imread_rawpy(path, grayscale, unchanged, anydepth)
+        else:
+            with cls.open_rb(path) as fb:
+                return imread_from_fileobject(fb, grayscale, unchanged, anydepth)
 
     @classmethod
-    def imwrite(cls, path: str, image: NDArray) -> None:
-        with cls.open_wb(path) as fwb:
-            imwrite_from_fileobject(fwb, image, path)
+    def imwrite(cls, path: str, image):
+        _, ext = os.path.splitext(path)
+        if ext.lower() == ".tiff" or ext.lower() == ".tif":
+            imwrite_rasterio(path, image)
+        else:
+            with cls.open_wb(path) as fwb:
+                imwrite_from_fileobject(fwb, image, ext)
 
     @classmethod
     def image_size(cls, path: str) -> Tuple[int, int]:
-        with cls.open_rb(path) as fb:
-            return image_size_from_fileobject(fb)
-
+        try:
+            with cls.open_rb(path) as fb:
+                return image_size_from_fileobject(fb)
+        except:
+            # Fallback to rasterio (RGB 32bit floats fail with PIL)
+            with rasterio.open(path, "r") as r:
+                return r.height, r.width
     @classmethod
     def timestamp(cls, path: str) -> float:
         return os.path.getmtime(path)

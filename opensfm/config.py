@@ -1,4 +1,7 @@
 # pyre-strict
+
+from __future__ import annotations
+
 import os
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, IO, Union
@@ -34,12 +37,16 @@ class OpenSfMConfig:
     feature_use_adaptive_suppression: bool = False
     # Bake segmentation info (class and instance) in the feature data. Thus it is done once for all at extraction time.
     features_bake_segmentation: bool = False
+    # Maximum amount of memory to use for feature extraction (in MB). See default in features_processing.py.
+    mem_ceiling: int | None = None
+    # Ratio of the memory ceiling to use for feature extraction. See default in features_processing.py.
+    mem_ratio: float | None = None
 
     ##################################
     # Params for SIFT
     ##################################
     # Smaller value -> more features
-    sift_peak_threshold: float = 0.1
+    sift_peak_threshold: float = 0.2
     # See OpenCV doc
     sift_edge_threshold: int = 10
     # See OpenCV doc
@@ -299,6 +306,9 @@ class OpenSfMConfig:
     # Number of grid division for selecting tracks in final bundle adjustment
     final_bundle_grid: int = 32
 
+    # Remove uncertain and isolated points from the final point cloud
+    filter_final_point_cloud: bool = False
+
     # Save reconstructions at every iteration
     save_partial_reconstructions: bool = False
 
@@ -388,6 +398,11 @@ class OpenSfMConfig:
     # Template to generate the relative path to a submodel images directory
     submodel_images_relpath_template: str = "submodels/submodel_%04d/images"
 
+    ####################################
+    # ODM specific flags
+    ####################################
+    camera_projection_type: str = "AUTO" # The projection type of the camera : attempt to detect it from metadata (AUTO), or set it manually (PERSPECTIVE, BROWN, FISHEYE, SPHERICAL) 
+    reconstruction_algorithm: str = "incremental" # The reconstruction algorithm to use (incremental, triangulation, planar)
 
 def default_config() -> Dict[str, Any]:
     """Return default configuration"""

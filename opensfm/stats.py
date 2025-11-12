@@ -4,8 +4,11 @@ import math
 import os
 import random
 import statistics
+import json
 from collections import defaultdict
 from functools import lru_cache
+from itertools import product
+import random
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import matplotlib as mpl
@@ -16,6 +19,7 @@ import numpy as np
 from numpy.typing import NDArray
 from opensfm import feature_loader, io, multiview, pygeometry, pymap, types
 from opensfm.dataset import DataSet, DataSetBase
+from opensfm import features
 
 RESIDUAL_PIXEL_CUTOFF = 4
 
@@ -47,6 +51,33 @@ def _gps_errors(reconstruction: types.Reconstruction) -> List[NDArray]:
             errors.append(np.array(optical_center - unbiased_gps))
     return errors
 
+def _gps_relative_errors(reconstruction):
+    errors = []
+
+    shotIds = list(reconstruction.shots)
+    for i in range(0, len(shotIds) - 1):
+        s1 = reconstruction.shots[shotIds[i]]
+        s2 = reconstruction.shots[shotIds[i + 1]]
+        if s1.metadata.gps_position.has_value and s2.metadata.gps_position.has_value:
+            measured_v = s1.metadata.gps_position.value - s2.metadata.gps_position.value
+            computed_v = s1.pose.get_origin() - s2.pose.get_origin()
+
+            errors.append(measured_v - computed_v)
+
+    return errors
+
+def _gps_accuracy(reconstructions):
+    accuracy = []
+
+    for reconstruction in reconstructions:
+        for shot in reconstruction.shots.values():
+            if shot.metadata.gps_accuracy.has_value:
+                accuracy.append(shot.metadata.gps_accuracy.value)
+
+    if len(accuracy) > 0:
+        return np.mean(accuracy)
+    else:
+        return 15.0
 
 def _gps_gcp_errors_stats(errors: Optional[NDArray]) -> Dict[str, Any]:
     if errors is None or len(errors) == 0:
@@ -67,11 +98,122 @@ def _gps_gcp_errors_stats(errors: Optional[NDArray]) -> Dict[str, Any]:
         "z": math.sqrt(m_squared[2]),
     }
     stats["average_error"] = average
+
+    errors = np.array(errors)
+    ce_errors = np.sqrt(errors[:,0] ** 2 + errors[:,1] ** 2)
+    le_errors = np.abs(errors[:,2])
+
+    stats["ce90"] = _compute_value_at_p_level(ce_errors, 0.90)
+    stats["le90"] = _compute_value_at_p_level(le_errors, 0.90)
+    
     return stats
+
+
+def _compute_value_at_p_level(samples, p=0.90):
+    # https://www.asprs.org/a/publications/proceedings/IGTF2016/IGTF2016-000255.pdf
+    n = len(samples)
+    if n < 1:
+        return -1
+    y = np.sort(samples)
+    if n < 7:
+        return y[-1]
+
+    kprime = int(np.floor((n + 1) * p)) - 1 # arrays are 0-indexed
+
+    if not ((n + 1) * p).is_integer():
+        kml = kprime + 0.5
+    else:
+        kml = kprime
+    
+    i = int(np.floor(kml)) - 1
+    j = int(np.ceil(kml)) - 1
+
+    return 0.5 * (y[i] + y[j])
+
+
+def td_errors(data: DataSetBase, tracks_manager, reconstructions):
+    errors = []
+    reproj_threshold = data.config["triangulation_threshold"]
+    min_ray_angle_degrees = data.config["triangulation_min_ray_angle"]
+
+    for rec in reconstructions:
+        reproj_errors = rec.map.compute_reprojection_errors(
+            tracks_manager,
+            pymap.ErrorType.Pixel
+        )
+
+        # For each point (cap to 1000 samples)
+        # get the first (up to) 3 cameras that
+        # triangulate a point and sample around
+        # the projection error radius (4 points)
+        # by computing all triangulation permutations
+
+        for p in list(rec.points.values())[:1000]:
+            track_obs = tracks_manager.get_track_observations(p.id)
+
+            err_perms = []
+
+            # Add error projection permutations
+            for shot_id, obs in track_obs.items():
+                if not shot_id in reproj_errors:
+                    continue
+
+                rerr = reproj_errors[shot_id][p.id]
+                err_perms.append([
+                    rerr * np.array([1, 1]),
+                    rerr * np.array([-1, 1]),
+                    rerr * np.array([1, -1]),
+                    rerr * np.array([-1, -1])
+                ])
+                if len(err_perms) >= 3:
+                    break
+            
+            # Calculate the cartesian product (try all possibilities)
+            err_products = np.array(list(product(*err_perms)))
+            
+            # Triangulate
+            ray_errors = []
+            for err_prod in err_products:
+
+                os, bs = [], []
+                i = 0
+                
+                for shot_id, obs in track_obs.items():
+                    if not shot_id in reproj_errors:
+                        continue
+
+                    shot = rec.shots[shot_id]
+                    os.append(shot.pose.get_origin())
+
+                    reprojected_obs = obs.point + err_prod[i]
+                    b = shot.camera.pixel_bearing(np.array(reprojected_obs))
+                    r = shot.pose.get_rotation_matrix().T
+                    bs.append(r.dot(b))
+
+                    i += 1
+
+                    if i >= 3:
+                        break
+                
+                if len(os) >= 2:
+                    thresholds = len(os) * [reproj_threshold]
+                    valid_triangulation, X = pygeometry.triangulate_bearings_midpoint(
+                        os, bs, thresholds, np.radians(min_ray_angle_degrees), np.radians(180.0 - min_ray_angle_degrees)
+                    )
+                    if valid_triangulation:
+                        ray_errors.append(X - p.coordinates)
+            
+            # Take the max. This is the maximum 3D error estimate
+            # for this point
+            if len(ray_errors) > 0:
+                errors.append((np.max(np.array(ray_errors), axis=0)))
+
+    return _gps_gcp_errors_stats(errors)
 
 
 def gps_errors(reconstructions: List[types.Reconstruction]) -> Dict[str, Any]:
     all_errors = []
+
     for rec in reconstructions:
         all_errors += _gps_errors(rec)
     return _gps_gcp_errors_stats(np.array(all_errors))
@@ -88,6 +230,8 @@ def gcp_errors(
         return {}
 
     all_errors = []
+    gcp_stats = []
+
     for gcp in gcps:
         if not gcp.lla:
             continue
@@ -103,8 +247,45 @@ def gcp_errors(
         if triangulated is None:
             continue
         gcp_enu = reference.to_topocentric(*gcp.lla_vec)
-        all_errors.append(triangulated - gcp_enu)
+        e = triangulated - gcp_enu
+        all_errors.append(e)
 
+        # Begin computation of GCP stats
+        observations = []
+        for i, obs in enumerate(gcp.observations):
+            if not obs.shot_id in rec.shots:
+                continue
+            shot = rec.shots[obs.shot_id]
+
+            reprojected = shot.project(gcp_enu)
+            annotated = obs.projection
+
+            r_pixel = features.denormalized_image_coordinates(np.array([[reprojected[0], reprojected[1]]]), shot.camera.width, shot.camera.height)[0]
+            r_pixel[0] /= shot.camera.width
+            r_pixel[1] /= shot.camera.height
+
+            a_pixel = features.denormalized_image_coordinates(np.array([[annotated[0], annotated[1]]]), shot.camera.width, shot.camera.height)[0]
+            a_pixel[0] /= shot.camera.width
+            a_pixel[1] /= shot.camera.height
+            
+            observations.append({
+                'shot_id': obs.shot_id,
+                'annotated': list(a_pixel),
+                'reprojected': list(r_pixel)
+            })
+
+        gcp_stats.append({
+            'id': gcp.id,
+            'coordinates': list(gcp_enu),
+            'observations': observations,
+            'error': list(e)
+        })
+
+        # End computation of GCP stats
+
+    with open(os.path.join(data.data_path, "stats", "ground_control_points.json"), 'w') as f:
+        f.write(json.dumps(gcp_stats, indent=4))
+    
     return _gps_gcp_errors_stats(np.array(all_errors))
 
 
@@ -311,6 +492,14 @@ def processing_statistics(
     except FileNotFoundError:
         stats["date"] = "unknown"
 
+    start_ct, end_ct = start_end_capture_time(reconstructions)
+    if start_ct is not None and end_ct is not None:
+        stats["start_date"] = datetime.datetime.utcfromtimestamp(start_ct).strftime("%d/%m/%Y at %H:%M:%S")
+        stats["end_date"] = datetime.datetime.utcfromtimestamp(end_ct).strftime("%d/%m/%Y at %H:%M:%S")
+    else:
+        stats["start_date"] = "unknown"
+        stats["end_date"] = "unknown"
+
     default_max = 1e30
     min_x, min_y, max_x, max_y = default_max, default_max, 0, 0
     for rec in reconstructions:
@@ -455,6 +644,7 @@ def compute_all_statistics(
     stats["rig_errors"] = rig_statistics(data, reconstructions)
     stats["gps_errors"] = gps_errors(reconstructions)
     stats["gcp_errors"] = gcp_errors(data, reconstructions)
+    stats["3d_errors"] = td_errors(data, tracks_manager, reconstructions)
 
     return stats
 
@@ -505,7 +695,7 @@ def save_matchgraph(
     highest = np.percentile(list(all_values), 95)
 
     plt.clf()
-    cmap = cm.get_cmap("viridis")
+    cmap = cm.viridis
     for (node1, node2), edge in sorted(connectivity.items(), key=lambda x: x[1]):
         if edge < 2 * data.config["resection_min_inliers"]:
             continue
@@ -515,11 +705,7 @@ def save_matchgraph(
             continue
         o1 = reconstructions[comp1].shots[node1].pose.get_origin()
         o2 = reconstructions[comp2].shots[node2].pose.get_origin()
-        # pyre-fixme[58]: `-` is not supported for operand types `int` and
-        #  `floating[Any]`.
-        # pyre-fixme[58]: `/` is not supported for operand types `int` and
-        #  `floating[Any]`.
-        c = max(0, min(1.0, 1 - (edge - lowest) / (highest - lowest)))
+        c = max(0, min(1.0, 1 - (float(edge) - lowest) / (highest - lowest)))
         plt.plot([o1[0], o2[0]], [o1[1], o2[1]], linestyle="-", color=cmap(c))
 
     for i, rec in enumerate(reconstructions):
@@ -542,6 +728,7 @@ def save_matchgraph(
         orientation="horizontal",
         label="Number of matches between images",
         pad=0.0,
+        ax=plt.gca(),
     )
 
     with io_handler.open_wb(os.path.join(output_path, "matchgraph.png")) as fwb:
@@ -704,8 +891,8 @@ def save_topview(
         sorted_shots = sorted(
             rec.shots.values(), key=lambda x: x.metadata.capture_time.value
         )
-        c_camera = cm.get_cmap("cool")(0 / len(reconstructions))
-        c_gps = cm.get_cmap("autumn")(0 / len(reconstructions))
+        c_camera = cm.cool(0 / len(reconstructions))
+        c_gps = cm.autumn(0 / len(reconstructions))
         for j, shot in enumerate(sorted_shots):
             o = shot.pose.get_origin()
             x, y = (
@@ -761,9 +948,11 @@ def save_topview(
     )
     plt.yticks(
         [im_size_y, im_size_y / 2, 0],
-        [0, f"{int(size_y / 2):.0f}", f"{size_y:.0f} meters"],
+        [f"{size_y:.0f} meters", f"{int(size_y / 2):.0f}", 0],
         fontsize="small",
     )
+    plt.gca().invert_yaxis()
+
     with io_handler.open_wb(os.path.join(output_path, "topview.png")) as fwb:
         plt.savefig(
             fwb,
@@ -968,7 +1157,7 @@ def save_residual_grids(
         )
 
         norm = colors.Normalize(vmin=lowest, vmax=highest)
-        cmap = cm.get_cmap("viridis_r")
+        cmap = cm.viridis_r
         sm = cm.ScalarMappable(norm=norm, cmap=cmap)
         sm.set_array([])
         plt.colorbar(
@@ -977,6 +1166,7 @@ def save_residual_grids(
             label="Residual Norm",
             pad=0.08,
             aspect=40,
+            ax=plt.gca(),
         )
 
         plt.xticks(
@@ -1015,3 +1205,22 @@ def decimate_points(
 
             for point_id in random_ids:
                 rec.remove_point(point_id)
+
+
+def start_end_capture_time(reconstructions):
+    end_ct = float('-inf')
+    start_ct = float('inf')
+
+    for reconstruction in reconstructions:
+        for shot in reconstruction.shots.values():
+            if shot.metadata.capture_time.has_value:
+                v = shot.metadata.capture_time.value
+                if v > end_ct:
+                    end_ct = v
+                if v < start_ct:
+                    start_ct = v
+
+    if end_ct != float('-inf') and start_ct != float('inf'):
+        return (start_ct, end_ct)
+    else:
+        return (None, None)

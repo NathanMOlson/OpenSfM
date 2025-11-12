@@ -24,7 +24,7 @@ target_link_libraries(geometry
     foundation
     ${CERES_LIBRARIES}
     )
-target_include_directories(geometry PUBLIC ${CMAKE_SOURCE_DIR})
+target_include_directories(geometry PUBLIC ${CMAKE_SOURCE_DIR} ${CERES_INCLUDE_DIR}/ceres/internal/miniglog)
 
 if (OPENSFM_BUILD_TESTS)
     set(GEOMETRY_TEST_FILES
@@ -50,6 +50,12 @@ target_link_libraries(pygeometry
     geometry
     foundation
 )
+
+if (OPENSFM_BUILD_TESTS)
+target_link_libraries(pygeometry PRIVATE ${GLOG_LIBRARY})
+endif()
+
 set_target_properties(pygeometry PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${opensfm_SOURCE_DIR}/.."
 )
+install(TARGETS pygeometry LIBRARY DESTINATION .)

@@ -13,13 +13,7 @@ class Command(command.CommandBase):
     help = "Compute the reconstruction"
 
     def run_impl(self, dataset: DataSet, args: argparse.Namespace) -> None:
-        reconstruct.run_dataset(dataset, args.algorithm)
+        reconstruct.run_dataset(dataset)
 
     def add_arguments_impl(self, parser: argparse.ArgumentParser) -> None:
-        parser.add_argument(
-            "--algorithm",
-            help="SfM algorithm to use to run reconstrution",
-            type=str,
-            choices=[k.value for k in reconstruction.ReconstructionAlgorithm],
-            default=reconstruction.ReconstructionAlgorithm.INCREMENTAL.value,
-        )
+        pass

@@ -4,6 +4,8 @@ dependencies:
     - cmake=3.31
     - make
     - libxcrypt
+    - libxml2
+    - libxslt
     - libopencv *=headless*
     - py-opencv
     - conda-forge::ceres-solver=2.2
@@ -12,23 +14,3 @@ dependencies:
     - anaconda::suitesparse
     - conda-forge::openblas
     - anaconda::metis
-    - pip
-    - pip:
-        - cloudpickle==3.1.1
-        - ExifRead==3.3.1
-        - Flask==3.1.1
-        - fpdf2==2.8.3
-        - joblib==1.5.1
-        - matplotlib==3.5.1
-        - networkx==3.4.2
-        - numpy==1.21.5
-        - Pillow==9.0.1
-        - pyproj>=3.3.0
-        - pytest==8.4.0
-        - python-dateutil==2.8.1
-        - PyYAML>=5.4.1
-        - scipy==1.8.0
-        - Sphinx==4.2.0
-        - xmltodict==0.14.2
-        - wheel
-        - sphinx_rtd_theme

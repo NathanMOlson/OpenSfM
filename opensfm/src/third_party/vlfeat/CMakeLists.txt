@@ -5,7 +5,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-but-set-variable")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-logical-not-parentheses")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-tautological-constant-out-of-range-compare")
 
-if( ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64" )
+if( ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64" OR (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64") )
     add_definitions( -DVL_DISABLE_SSE2 )
 endif()
 

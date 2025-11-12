@@ -380,19 +380,27 @@ def extract_features_sift(
                 sigma=sift_sigma,
             )
             descriptor = detector
-        elif context.OPENCV3:
-            detector = cv2.xfeatures2d.SIFT_create(
-                nfeatures=sift_nfeatures,
-                nOctaveLayers=sift_octave_layers,
-                contrastThreshold=sift_peak_threshold,
-                edgeThreshold=sift_edge_threshold,
-                sigma=sift_sigma,
-            )
+        elif context.OPENCV3 or context.OPENCV4:
+            try:
+                detector = cv2.xfeatures2d.SIFT_create(
+                    nfeatures=sift_nfeatures,
+                    nOctaveLayers=sift_octave_layers,
+                    contrastThreshold=sift_peak_threshold,
+                    edgeThreshold=sift_edge_threshold,
+                    sigma=sift_sigma,
+                )
+            except AttributeError as ae:
+                if "no attribute 'xfeatures2d'" in str(ae):
+                    logger.error(
+                        "OpenCV Contrib modules are required to extract SIFT features"
+                    )
+                raise
             descriptor = detector
         else:
             detector = cv2.FeatureDetector_create("SIFT")
             descriptor = cv2.DescriptorExtractor_create("SIFT")
             detector.setDouble("edgeThreshold", sift_edge_threshold)
+            detector.setDouble("contrastThreshold", sift_peak_threshold)
 
         points = detector.detect(image)
         logger.debug("Found {0} points in {1}s".format(len(points), time.time() - t))
@@ -414,6 +422,20 @@ def extract_features_sift(
         desc = np.array(np.zeros((0, 3)))
     return points, desc
 
+def extract_features_popsift(
+    image: NDArray, config: Dict[str, Any], features_count: int
+) -> Tuple[NDArray, NDArray]:
+    from opensfm import pypopsift
+
+    sift_edge_threshold = float(config["sift_edge_threshold"])
+    sift_peak_threshold = float(config["sift_peak_threshold"])
+
+    points, desc = pypopsift.popsift(image, peak_threshold=sift_peak_threshold,
+                                edge_threshold=sift_edge_threshold,
+                                target_num_features=features_count,
+                                use_root=bool(config["feature_root"]))
+
+    return points, desc
 
 def extract_features_surf(
     image: NDArray, config: Dict[str, Any], features_count: int
@@ -513,8 +535,17 @@ def extract_features_hahog(
     image: NDArray, config: Dict[str, Any], features_count: int
 ) -> Tuple[NDArray, NDArray]:
     t = time.time()
+
+    # VlFeat expects pixel values between 0, 1
+    if np.issubdtype(image.dtype, np.uint8):
+        image = image.astype(np.float32) / 255
+    if np.issubdtype(image.dtype, np.uint16):
+        image = image.astype(np.float32) / 65535
+    elif not np.issubdtype(image.dtype, np.float32):
+        raise TypeError(f"HAHOG unsupported image type: {image.dtype}")
+
     points, desc = pyfeatures.hahog(
-        image.astype(np.float32) / 255,  # VlFeat expects pixel values between 0, 1
+        image,  
         peak_threshold=config["hahog_peak_threshold"],
         edge_threshold=config["hahog_edge_threshold"],
         target_num_features=features_count,
@@ -529,6 +560,32 @@ def extract_features_hahog(
     if config["hahog_normalize_to_uchar"]:
         # pyre-fixme[16]: `int` has no attribute `clip`.
         desc = (uchar_scaling * desc).clip(0, 255).round()
+
+    logger.debug("Found {0} points in {1}s".format(len(points), time.time() - t))
+    return points, desc
+
+
+def extract_features_dspsift(
+    image: NDArray, config: Dict[str, Any], features_count: int
+) -> Tuple[NDArray, NDArray]:
+    t = time.time()
+
+    # VlFeat expects pixel values between 0, 1
+    if np.issubdtype(image.dtype, np.uint8):
+        image = image.astype(np.float32) / 255
+    if np.issubdtype(image.dtype, np.uint16):
+        image = image.astype(np.float32) / 65535
+    elif not np.issubdtype(image.dtype, np.float32):
+        raise TypeError(f"DSP SIFT unsupported image type: {image.dtype}")
+
+    points, desc = pyfeatures.dspsift(
+        image,
+        peak_threshold=float(config["sift_peak_threshold"]/10),
+        edge_threshold=float(config["sift_edge_threshold"]),
+        target_num_features=features_count,
+        feature_root=bool(config["feature_root"]),
+        estimate_affine_shape=False,
+    )
 
     logger.debug("Found {0} points in {1}s".format(len(points), time.time() - t))
     return points, desc
@@ -596,7 +653,10 @@ def extract_features(
 
     assert image.ndim == 2 or image.ndim == 3 and image.shape[2] in [1, 3]
     assert image.shape[0] > 2 and image.shape[1] > 2
-    assert np.issubdtype(image.dtype, np.uint8)
+
+    feature_type = config["feature_type"].upper()
+    if not does_type_support_any_depth(feature_type):
+        assert np.issubdtype(image.dtype, np.uint8)
 
     image = resized_image(image, extraction_size)
     if image.ndim == 2:  # convert (h, w) to (h, w, 1)
@@ -607,7 +667,6 @@ def extract_features(
         image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     else:
         image_gray = image
-    feature_type = config["feature_type"].upper()
     if feature_type == "SIFT":
         points, desc = extract_features_sift(image_gray, config, features_count)
     elif feature_type == "SURF":
@@ -618,9 +677,13 @@ def extract_features(
         points, desc = extract_features_hahog(image_gray, config, features_count)
     elif feature_type == "ORB":
         points, desc = extract_features_orb(image_gray, config, features_count)
+    elif feature_type == 'SIFT_GPU':
+        points, desc = extract_features_popsift(image_gray, config, features_count)
+    elif feature_type == 'DSPSIFT':
+        points, desc = extract_features_dspsift(image_gray, config, features_count)
     else:
         raise ValueError(
-            "Unknown feature type (must be SURF, SIFT, AKAZE, HAHOG or ORB)"
+            f"Unknown feature type {feature_type} (must be SURF, SIFT, AKAZE, HAHOG, SIFT_GPU, DSPSIFT, or ORB)"
         )
 
     xs = points[:, 0].round().astype(int)
@@ -668,3 +731,6 @@ def build_flann_index(descriptors: NDArray, config: Dict[str, Any]) -> cv2.flann
         )
 
     return context.flann_Index(descriptors, flann_params)
+
+def does_type_support_any_depth(feature_type: str) -> bool:
+    return feature_type.upper() in ["HAHOG", "DSPSIFT"]

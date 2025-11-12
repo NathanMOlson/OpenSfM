@@ -10,9 +10,14 @@ import cv2
 import networkx as nx
 import numpy as np
 import scipy.spatial as spatial
+import vmem
+import copy
+import sys
+from collections import namedtuple
 from networkx.algorithms import bipartite
 from networkx.classes.reportviews import EdgeView
 from numpy.typing import NDArray
+from opensfm.large.lru_cache import lru_cache
 from opensfm import (
     align,
     context,
@@ -202,7 +207,7 @@ def add_camera_constraints_hard(
                 )
 
 
-@lru_cache(25)
+@lru_cache(use_memory_up_to=vmem.virtual_memory().available * 0.9)
 def load_reconstruction(
     path: str, index: int
 ) -> Tuple[str, Tuple[types.Reconstruction, pymap.TracksManager]]:

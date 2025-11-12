@@ -15,9 +15,6 @@ target_link_libraries(foundation
     ${OpenCV_LIBS}
     ${OpenMP_libomp_LIBRARY}
     Eigen3::Eigen
-  PRIVATE
-    ${GFLAGS_LIBRARY}
-    ${GLOG_LIBRARY}
 )
 target_include_directories(foundation
   PUBLIC
@@ -28,6 +25,7 @@ target_include_directories(foundation
 )
 
 if (OPENSFM_BUILD_TESTS)
+    target_link_libraries(foundation PRIVATE ${GLOG_LIBRARY})
     set(FOUNDATION_TEST_FILES
         test/newton_raphson_test.cc
         test/union_find_test.cc

@@ -12,6 +12,7 @@ from numpy.typing import NDArray
 from opensfm import config, features, geo, io, masking, pygeometry, pymap, rig, types
 from opensfm.dataset_base import DataSetBase
 from PIL.PngImagePlugin import PngImageFile
+import hashlib
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -347,9 +348,15 @@ class DataSet(DataSetBase):
         # as 'pickle.load' is RCE-prone. Will raise on any class other
         # than the numpy ones we allow.
         class MatchingUnpickler(pickle.Unpickler):
+            # Handle both numpy <2.0 (np.core) and numpy >=2.0 (np._core)
+            _multiarray = (
+                np.core.multiarray if hasattr(np, "core") else np._core.multiarray
+            )
             modules_map = {
-                "numpy.core.multiarray._reconstruct": np.core.multiarray,
-                "numpy.core.multiarray.scalar": np.core.multiarray,
+                "numpy.core.multiarray._reconstruct": _multiarray,
+                "numpy.core.multiarray.scalar": _multiarray,
+                "numpy._core.multiarray._reconstruct": _multiarray,
+                "numpy._core.multiarray.scalar": _multiarray,
                 "numpy.ndarray": np,
                 "numpy.dtype": np,
             }
@@ -396,8 +403,9 @@ class DataSet(DataSetBase):
         self, filename: Optional[str] = None
     ) -> pymap.TracksManager:
         """Return the tracks manager"""
-        with self.io_handler.open_rt(self._tracks_manager_file(filename)) as f:
-            return pymap.TracksManager.instanciate_from_string(f.read())
+        # with self.io_handler.open_rt(self._tracks_manager_file(filename)) as f:
+        #     return pymap.TracksManager.instanciate_from_string(f.read())
+        return pymap.TracksManager.instanciate_from_file(self._tracks_manager_file(filename))
 
     def tracks_exists(self, filename: Optional[str] = None) -> bool:
         return self.io_handler.isfile(self._tracks_manager_file(filename))
@@ -405,8 +413,9 @@ class DataSet(DataSetBase):
     def save_tracks_manager(
         self, tracks_manager: pymap.TracksManager, filename: Optional[str] = None
     ) -> None:
-        with self.io_handler.open_wt(self._tracks_manager_file(filename)) as fw:
-            fw.write(tracks_manager.as_string())
+        # with self.io_handler.open_wt(self._tracks_manager_file(filename)) as fw:
+        #     fw.write(tracks_manager.as_string())
+        tracks_manager.write_to_file(self._tracks_manager_file(filename))
 
     def _reconstruction_file(self, filename: Optional[str]) -> str:
         """Return path of reconstruction file"""
@@ -742,6 +751,9 @@ class UndistortedDataSet:
 
     def _undistorted_image_file(self, image: str) -> str:
         """Path of undistorted version of an image."""
+        p, ext = os.path.splitext(image)
+        if ' ' in image:
+            image = p.replace(' ', '') + hashlib.md5(image.encode('utf8')).hexdigest() + ext
         return os.path.join(self._undistorted_image_path(), image)
 
     def load_undistorted_image(self, image: str) -> NDArray:
@@ -954,15 +966,17 @@ class UndistortedDataSet:
 
     def load_undistorted_tracks_manager(self) -> pymap.TracksManager:
         filename = os.path.join(self.data_path, "tracks.csv")
-        with self.io_handler.open_rt(filename) as f:
-            return pymap.TracksManager.instanciate_from_string(f.read())
+        # with self.io_handler.open_rt(filename) as f:
+        #     return pymap.TracksManager.instanciate_from_string(f.read())
+        return pymap.TracksManager.instanciate_from_file(filename)
 
     def save_undistorted_tracks_manager(
         self, tracks_manager: pymap.TracksManager
     ) -> None:
         filename = os.path.join(self.data_path, "tracks.csv")
-        with self.io_handler.open_wt(filename) as fw:
-            fw.write(tracks_manager.as_string())
+        # with self.io_handler.open_wt(filename) as fw:
+        #     fw.write(tracks_manager.as_string())
+        tracks_manager.write_to_file(filename)
 
     def load_undistorted_reconstruction(self) -> List[types.Reconstruction]:
         filename = os.path.join(self.data_path, "reconstruction.json")

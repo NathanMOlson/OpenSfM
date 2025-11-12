@@ -27,6 +27,7 @@ from . import (
     reconstruct,
     reconstruct_from_prior,
     undistort,
+    rs_correct,
 )
 from .command_runner import command_runner
 
@@ -55,4 +56,5 @@ opensfm_commands: List[ModuleType] = [
     extend_reconstruction,
     create_submodels,
     align_submodels,
+    rs_correct,
 ]

@@ -5,6 +5,7 @@ set(FEATURES_FILES
     src/akaze_bind.cc
     src/hahog.cc
     src/matching.cc
+    src/dspsift.cc
 )
 add_library(features ${FEATURES_FILES})
 target_link_libraries(features
@@ -27,3 +28,4 @@ target_link_libraries(pyfeatures
 set_target_properties(pyfeatures PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${opensfm_SOURCE_DIR}/.."
 )
+install(TARGETS pyfeatures LIBRARY DESTINATION .)
