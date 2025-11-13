@@ -494,6 +494,22 @@ std::unordered_set<map::TrackId> BAHelpers::SelectTracksGrid(
         set_selected_tracks.insert(track_id);
       }
     }
+
+    int added_tracks = 0;
+    for (int n = 5; n >= 3; n--) {
+      for (const auto& lm_obs : shot.GetLandmarkObservations()) {
+        auto* lm = lm_obs.first;
+        const size_t track_len = lm->GetObservations().size();
+        if (set_selected_tracks.count(lm->id_) == 0 && track_len >= n) {
+          set_selected_tracks.insert(lm->id_);
+          added_tracks++;
+        }
+      }
+      if(added_tracks >= 32)
+      {
+        break;
+      }
+    }
   }
 
   return set_selected_tracks;
