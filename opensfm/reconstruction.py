@@ -235,19 +235,18 @@ def _pair_reconstructability_arguments(
     threshold = 4 * data.config["five_point_algo_threshold"]
     args = []
     for (im1, im2), (_, p1, p2) in track_dict.items():
-        camera1 = cameras[data.load_exif(im1)["camera"]]
-        camera2 = cameras[data.load_exif(im2)["camera"]]
-        args.append((im1, im2, p1, p2, camera1, camera2, threshold))
+        x1 = np.array([data.load_exif(im1)["gps"]["latitude"], data.load_exif(im1)["gps"]["longitude"]])
+        x2 = np.array([data.load_exif(im2)["gps"]["latitude"], data.load_exif(im2)["gps"]["longitude"]])
+        x1[1] = x1[1] * math.cos(math.radians(x1[0]))
+        x2[1] = x2[1] * math.cos(math.radians(x1[0]))
+        d = np.linalg.norm(x1 - x2)
+        args.append((im1, im2, p1, p2, d))
     return args
 
 
 def _compute_pair_reconstructability(args: TPairArguments) -> Tuple[str, str, float]:
-    im1, im2, p1, p2, camera1, camera2, threshold = args
-    R, inliers = two_view_reconstruction_rotation_only(
-        p1, p2, camera1, camera2, threshold
-    )
-    r = pairwise_reconstructability(len(p1), len(inliers))
-    return (im1, im2, r)
+    im1, im2, p1, p2, d = args
+    return (im1, im2, d * math.sqrt(max(0, len(p1) - 32)))
 
 
 def add_shot(
@@ -1850,10 +1849,13 @@ def compute_image_pairs_sequential(
         if size < min_common:
             continue
         features1, features2 = _get_common_feature_arrays(tracks_manager, im1, im2)
-        camera1 = cameras[data.load_exif(im1)["camera"]]
-        camera2 = cameras[data.load_exif(im2)["camera"]]
+        x1 = np.array([data.load_exif(im1)["gps"]["latitude"], data.load_exif(im1)["gps"]["longitude"]])
+        x2 = np.array([data.load_exif(im2)["gps"]["latitude"], data.load_exif(im2)["gps"]["longitude"]])
+        x1[1] = x1[1] * math.cos(math.radians(x1[0]))
+        x2[1] = x2[1] * math.cos(math.radians(x1[0]))
+        d = np.linalg.norm(x1 - x2)
         result = _compute_pair_reconstructability(
-            (im1, im2, features1, features2, camera1, camera2, threshold)
+            (im1, im2, features1, features2, d)
         )
         if result[2] > 0:
             results.append(result)
