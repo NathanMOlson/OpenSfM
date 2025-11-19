@@ -316,6 +316,7 @@ PYBIND11_MODULE(pygeometry, m) {
   m.def("relative_pose_from_essential", geometry::RelativePoseFromEssential);
   m.def("relative_rotation_n_points", geometry::RelativeRotationNPoints);
   m.def("relative_pose_refinement", geometry::RelativePoseRefinement);
+  m.def("relative_pose_rotation_refinement", geometry::RelativePoseRotationRefinement);
 
   py::class_<geometry::Pose>(m, "Pose")
       .def(py::init<const Mat3d&>())

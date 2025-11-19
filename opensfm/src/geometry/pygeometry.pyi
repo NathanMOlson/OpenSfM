@@ -29,6 +29,7 @@ __all__ = [
     "point_refinement",
     "relative_pose_from_essential",
     "relative_pose_refinement",
+    "relative_pose_rotation_refinement",
     "relative_rotation_n_points",
     "triangulate_bearings_dlt",
     "triangulate_bearings_midpoint",
@@ -378,6 +379,12 @@ def relative_pose_from_essential(
     arg0: numpy.typing.NDArray, arg1: numpy.typing.NDArray, arg2: numpy.typing.NDArray
 ) -> numpy.typing.NDArray: ...
 def relative_pose_refinement(
+    arg0: numpy.typing.NDArray,
+    arg1: numpy.typing.NDArray,
+    arg2: numpy.typing.NDArray,
+    arg3: int,
+) -> numpy.typing.NDArray: ...
+def relative_pose_rotation_refinement(
     arg0: numpy.typing.NDArray,
     arg1: numpy.typing.NDArray,
     arg2: numpy.typing.NDArray,
