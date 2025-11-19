@@ -169,7 +169,6 @@ def test_relative_pose_rotation_refinement(
     exact_found = 0
     for f1, f2, _, pose in pairs_and_their_E:
         pose = copy.deepcopy(pose)
-        pose.translation /= np.linalg.norm(pose.translation)
 
         noisy_pose = copy.deepcopy(pose)
         noisy_pose.rotation += np.random.rand(3) * 1e-2
