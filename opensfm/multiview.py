@@ -527,6 +527,20 @@ def relative_pose_optimize_nonlinear(
     return Rt
 
 
+def relative_pose_optimize_nonlinear_known_translation(
+    b1: NDArray, b2: NDArray, t: NDArray, R: NDArray, iterations: int
+) -> NDArray:
+    Rt = np.zeros((3, 4))
+    Rt[:3, :3] = R.T
+    Rt[:, 3] = -R.T.dot(t)
+    Rt_refined = pygeometry.relative_pose_rotation_refinement(Rt, b1, b2, iterations)
+
+    R, t = Rt_refined[:3, :3].copy(), Rt_refined[:, 3].copy()
+    Rt[:3, :3] = R.T
+    Rt[:, 3] = -R.T.dot(t)
+    return Rt
+
+
 def triangulate_gcp(
     point: pymap.GroundControlPoint,
     shots: Dict[str, pymap.Shot],

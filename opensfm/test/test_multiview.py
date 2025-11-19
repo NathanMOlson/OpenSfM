@@ -161,3 +161,23 @@ def test_relative_pose_refinement(
 
     exacts = len(pairs_and_their_E) - 1
     assert exact_found >= exacts
+
+
+def test_relative_pose_rotation_refinement(
+    pairs_and_their_E: List[Tuple[NDArray, NDArray, NDArray, pygeometry.Pose]],
+) -> None:
+    exact_found = 0
+    for f1, f2, _, pose in pairs_and_their_E:
+        pose = copy.deepcopy(pose)
+        pose.translation /= np.linalg.norm(pose.translation)
+
+        noisy_pose = copy.deepcopy(pose)
+        noisy_pose.rotation += np.random.rand(3) * 1e-2
+        Rt = noisy_pose.get_world_to_cam()[:3]
+        result = pygeometry.relative_pose_rotation_refinement(Rt, f1, f2, 1000)
+
+        expected = pose.get_world_to_cam()[:3]
+        exact_found += np.linalg.norm(expected - result) < 1.8e-1
+
+    exacts = len(pairs_and_their_E) - 1
+    assert exact_found >= exacts
