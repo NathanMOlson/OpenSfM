@@ -571,16 +571,20 @@ def extract_features_dspsift(
     t = time.time()
 
     # VlFeat expects pixel values between 0, 1
+    threshold_scale = 1
     if np.issubdtype(image.dtype, np.uint8):
         image = image.astype(np.float32) / 255
     if np.issubdtype(image.dtype, np.uint16):
-        image = image.astype(np.float32) / 65535
+        low = np.min(image)
+        high = np.max(image)
+        image = (image - low).astype(np.float32) / (high - low)
+        threshold_scale = 255 / (high - low)
     elif not np.issubdtype(image.dtype, np.float32):
         raise TypeError(f"DSP SIFT unsupported image type: {image.dtype}")
 
     points, desc = pyfeatures.dspsift(
         image,
-        peak_threshold=float(config["sift_peak_threshold"]/10),
+        peak_threshold=float(threshold_scale * config["sift_peak_threshold"]/10),
         edge_threshold=float(config["sift_edge_threshold"]),
         target_num_features=features_count,
         feature_root=bool(config["feature_root"]),
@@ -732,5 +736,6 @@ def build_flann_index(descriptors: NDArray, config: Dict[str, Any]) -> cv2.flann
 
     return context.flann_Index(descriptors, flann_params)
 
+
 def does_type_support_any_depth(feature_type: str) -> bool:
-    return feature_type.upper() in ["HAHOG", "DSPSIFT"]
+    return feature_type.upper() in ["HAHOG", "DSPSIFT", "ROOT_HAHOG", "ROOT_DSPSIFT"]
