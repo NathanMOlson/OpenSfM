@@ -683,6 +683,72 @@ def reconstructed_points_for_images(
     return sorted(res.items(), key=lambda x: -x[1])
 
 
+
+def resect_alt(
+    data: DataSetBase,
+    tracks_manager: pymap.TracksManager,
+    reconstruction: types.Reconstruction,
+    shot_id: str,
+    threshold: float,
+    min_inliers: int,
+) -> Tuple[bool, Set[str], Dict[str, Any]]:
+    report: Dict[str, Any] = {}
+    best_shot_obs = []
+    for s in reconstruction.get_shots():
+        common_obs = tracks_manager.get_all_common_observations(s, shot_id)
+        if len(common_obs) > len(best_shot_obs):
+            best_shot = s
+            best_shot_obs = common_obs
+
+    if len(best_shot_obs) < 2:
+        return False, set(), set(), report
+
+    rig_assignments = rig.rig_assignments_per_image(data.load_rig_assignments())
+    camera_id = data.load_exif(shot_id)["camera"]
+    camera = reconstruction.cameras[camera_id]
+
+    b1s, b2s, ids = [], [], []
+    for track, obs1, obs2 in best_shot_obs:
+        b1s.append(camera.pixel_bearing(obs1.point))
+        b2s.append(camera.pixel_bearing(obs2.point))
+        ids.append(track)
+
+    metadata = helpers.get_image_metadata(data, shot_id)
+
+    if not metadata.gps_position.has_value:
+        return False, set(), set(), report
+    gps_pos = metadata.gps_position.value
+    reference_pose = reconstruction.get_shot(best_shot).pose
+    R0 = np.eye(3)
+    t0 = reference_pose.get_R_world_to_cam().dot((gps_pos - reference_pose.get_origin()))
+
+    Rg = R0.dot(reference_pose.get_R_world_to_cam())
+    tg = -Rg.dot(reference_pose.get_R_cam_to_world().dot(t0) + reference_pose.get_origin())
+
+    T = multiview.relative_pose_ransac(b1s, b2s, threshold, 1000, 0.999)
+    R = T[:, :3]
+    t = T[:, 3]*np.linalg.norm(t0)
+    inliers = _two_view_reconstruction_inliers(np.array(b1s), np.array(b2s), R, t, threshold)
+
+    Rr = R.dot(reference_pose.get_R_world_to_cam())
+    tr = -Rr.dot(reference_pose.get_R_cam_to_world().dot(t) + reference_pose.get_origin())
+
+    if len(inliers) >= min_inliers:
+        assert shot_id not in reconstruction.shots
+
+        new_shots = add_shot(
+            data, reconstruction, rig_assignments, shot_id, pygeometry.Pose(Rr, tr)
+        )
+
+        # new_tracks = triangulate_shot_features(
+        #     tracks_manager, reconstruction, new_shots, data.config
+        # )
+        tracks = set()
+        report["shots"] = list(new_shots)
+        return True, new_shots, tracks, report
+    else:
+        return False, set(), set(), report
+
 def resect(
     data: DataSetBase,
     tracks_manager: pymap.TracksManager,
@@ -1646,6 +1712,15 @@ def grow_reconstruction(
                 threshold,
                 min_inliers,
             )
+            if not ok:
+                ok, new_shots, resected_tracks, resrep = resect_alt(
+                    data,
+                    tracks_manager,
+                    reconstruction,
+                    image,
+                    threshold,
+                    min_inliers,
+                )
             if not ok:
                 continue
 
