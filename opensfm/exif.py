@@ -674,13 +674,18 @@ def hard_coded_calibration(exif: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 def focal_ratio_calibration(exif: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if exif.get("focal_ratio"):
+        k1 = exif["k1"] if exif.get("k1") else 0.0
+        k2 = exif["k2"] if exif.get("k2") else 0.0
+        p1 = exif["p1"] if exif.get("p1") else 0.0
+        p2 = exif["p2"] if exif.get("p2") else 0.0
+        k3 = exif["k3"] if exif.get("k3") else 0.0
         return {
             "focal": exif["focal_ratio"],
-            "k1": 0.0,
-            "k2": 0.0,
-            "p1": 0.0,
-            "p2": 0.0,
-            "k3": 0.0,
+            "k1": k1,
+            "k2": k2,
+            "p1": p1,
+            "p2": p2,
+            "k3": k3,
         }
 
 
