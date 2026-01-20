@@ -1,8 +1,8 @@
-## This is OpenDroneMap's OpenSfM fork
+## This is Lab 308's OpenSfM fork
 
-This fork is pretty close to upstream OpenSfM, but includes changes specific to ODM.
+This fork is pretty close to [OpenDroneMap's fork](https://github.com/OpenDroneMap/OpenSfM) of OpenSfM, but includes changes specific to Lab 308's usage.
 
-Please note that all such changes are released under the AGPLv3 license, not BSD.
+Please note that all changes in OpenDroneMap's fork and in this fork are released under the AGPLv3 license, not BSD.
 
 OpenSfM ![Docker workflow](https://github.com/mapillary/opensfm/workflows/Docker%20CI/badge.svg)
 =======
